@@ -1,0 +1,67 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-dev-environment:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    
+    # Set the working directory to the 'dev' environment
+    defaults:
+      run:
+        working-directory: ./infra/dev
+
+    # These permissions are required to use AWS OIDC for authentication
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read  # Required to check out the code
+      pull-requests: read # Optional: for PR comments
+
+    steps:
+      # checkout
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # config for aws
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # TF setup
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # TF Init
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
+
+      # TF Validate 
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+
+      # TF Plan 
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="project_name=${{ vars.PROJECT_NAME }}" \
+            -out=tfplan
+      
+      # TF Apply 
+      
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform apply -auto-approve tfplan
