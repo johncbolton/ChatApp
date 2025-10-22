@@ -1,0 +1,59 @@
+# Two step pipeline to scan and lint the terraform code.
+
+name: 'Lint & Scan'
+
+on: [push, pull_request]
+
+#Job 1
+
+jobs:
+  gitleaks-scan:
+    name: Scan for Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LEAK_EXIT_CODE: "1"
+
+  # Job 2
+  terraform-lint:
+    name: Lint Terraform
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Initialize Terraform (for validate)
+        run: |
+          terraform -chdir=dev init -backend=false
+          terraform -chdir=uat init -backend=false
+          terraform -chdir=prod init -backend=false
+        
+      - name: Check Terraform Formatting
+        run: terraform fmt -check -recursive
+
+      - name: Validate Terraform Syntax (all envs)
+        run: |
+          terraform -chdir=dev validate
+          terraform -chdir=uat validate
+          terraform -chdir=prod validate
+
+      - name: Run TFLint
+        run: tflint --recursive
