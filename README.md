@@ -1,2 +1,3 @@
 # ChatApp
-Basic chat app
+
+Placeholder to a basic chat app in a mono repo with infra.
