@@ -1,6 +1,6 @@
 # pipeline to scan terraform code.
 
-name: 'Lint & Scan'
+name: 'Scan'
 
 on: [push, pull_request]
 
