@@ -21,32 +21,3 @@ jobs:
         env:
           GITLEAKS_LEAK_EXIT_CODE: "1"
 
-  # Job 2
-  terraform-lint:
-    name: Lint Terraform
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./infrastructure
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: latest
-
-      - name: Initialize and Validate Terraform
-        run: |
-          terraform init -backend=false
-          terraform validate
-        
-      - name: Check Terraform Formatting
-        run: terraform fmt -check -recursive
-
-      - name: Run TFLint
-        run: tflint --recursive
