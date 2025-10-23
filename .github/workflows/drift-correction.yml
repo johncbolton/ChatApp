@@ -35,7 +35,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3.1.0
         with:
           terraform_version: "1.9.2" # Or "latest"
-          terraform_wrapper: false # Keep this false as we're not using wrapper outputs
+          terraform_wrapper: false
 
       - name: Install jq
         run: |
@@ -43,18 +43,22 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
           which jq
 
-      - name: Verify Terraform Version
+      - name: Verify Terraform Version & Capture Path
+        id: verify_tf # Give this step an ID
         run: |
-          set -x # Print executed commands
+          set -x
           echo "Verifying Terraform version and path:"
-          which terraform
-          terraform version
+          TF_PATH=$(which terraform)
+          echo "Terraform binary path is: $TF_PATH"
+          echo "terraform_path=$TF_PATH" >> "$GITHUB_OUTPUT" # Save the path as an output
+          $TF_PATH version
 
       - name: Terraform Init
         id: init
         run: |
           set -x
-          terraform init \
+          # Use the captured path from the previous step
+          ${{ steps.verify_tf.outputs.terraform_path }} init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
 
@@ -62,19 +66,24 @@ jobs:
         id: plan
         run: |
           set -x
-          terraform plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
+          # Use the captured path
+          ${{ steps.verify_tf.outputs.terraform_path }} plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
 
       - name: Terraform Import Login
         id: import-login
         run: |
           set -x
+          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }} # Get the correct TF path
           echo "--- Import Login Step ---"
-          echo "Verifying terraform binary for this step:"
-          which terraform
-          terraform version
+          echo "Using Terraform binary at: $TF_PATH"
+          $TF_PATH version # Verify again just to be sure
 
           echo "Getting REST_API_ID..."
-          REST_API_ID=$(terraform state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
+          # Explicitly use the TF_PATH variable for state show
+          STATE_JSON=$($TF_PATH state show -json 'module.api.aws_api_gateway_rest_api.api')
+          echo "State JSON fetched." # Add log to confirm state show ran
+
+          REST_API_ID=$(echo "$STATE_JSON" | jq -r .values.id)
           echo "REST_API_ID is: [${REST_API_ID}]"
 
           if [ -z "$REST_API_ID" ]; then
@@ -92,15 +101,23 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          terraform import module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
+          # Explicitly use the TF_PATH variable for import
+          $TF_PATH import module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
 
       - name: Terraform Import Get Upload URL
         id: import-get-upload-url
         run: |
           set -x
+          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }} # Get the correct TF path
           echo "--- Import Get Upload URL Step ---"
+          echo "Using Terraform binary at: $TF_PATH"
+
           echo "Getting REST_API_ID..."
-          REST_API_ID=$(terraform state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
+          # Explicitly use the TF_PATH variable
+          STATE_JSON=$($TF_PATH state show -json 'module.api.aws_api_gateway_rest_api.api')
+          echo "State JSON fetched."
+
+          REST_API_ID=$(echo "$STATE_JSON" | jq -r .values.id)
           echo "REST_API_ID is: [${REST_API_ID}]"
 
           if [ -z "$REST_API_ID" ]; then
@@ -118,10 +135,12 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          terraform import module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
+          # Explicitly use the TF_PATH variable
+          $TF_PATH import module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
 
       - name: Terraform Apply
         id: apply
         run: |
           set -x
-          terraform apply -auto-approve
+          # Use the captured path
+          ${{ steps.verify_tf.outputs.terraform_path }} apply -auto-approve
