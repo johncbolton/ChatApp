@@ -33,6 +33,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.7.5"
+          terraform_wrapper: false  # ensures CLI commands run directly
+
+      - name: Verify Terraform Version
+        run: terraform version
 
       - name: Terraform Init
         id: init
@@ -44,10 +48,10 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
-     
+
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
-     
+
       - name: Terraform Import Login
         id: import-login
         run: |
@@ -65,3 +69,4 @@ jobs:
       - name: Terraform Apply
         id: apply
         run: terraform apply -auto-approve
+
