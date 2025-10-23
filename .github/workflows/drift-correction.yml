@@ -35,6 +35,15 @@ jobs:
           terraform_version: "1.7.5"
           terraform_wrapper: false  # ensures CLI commands run directly
 
+      - name: Force correct Terraform binary in PATH
+        run: |
+          which terraform
+          terraform version
+          sudo rm -f /usr/bin/terraform || true
+          echo "Using Terraform from setup-terraform:"
+          which terraform
+          terraform version
+
       - name: Verify Terraform Version
         run: terraform version
 
