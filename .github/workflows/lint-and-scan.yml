@@ -1,6 +1,6 @@
-# Two step pipeline to scan and lint the terraform code.
+# pipeline to scan terraform code.
 
-name: 'Lint & Scan'
+name: 'Scan'
 
 on: [push, pull_request]
 
