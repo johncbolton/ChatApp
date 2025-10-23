@@ -43,8 +43,3 @@ variable "aws_region" {
   type        = string
   description = "The AWS region."
 }
-
-variable "api_gateway_deployment_id" {
-  type        = string
-  description = "The ID of the API Gateway deployment."
-}
