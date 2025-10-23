@@ -35,25 +35,26 @@ jobs:
         uses: hashicorp/setup-terraform@v3.1.0
         with:
           terraform_version: "1.9.2" # Or "latest"
-          terraform_wrapper: false
+          terraform_wrapper: false # Keep this false as we're not using wrapper outputs
+
+      - name: Install jq
+        run: |
+          set -x
+          sudo apt-get update && sudo apt-get install -y jq
+          which jq
 
       - name: Verify Terraform Version
         run: |
           set -x # Print executed commands
           echo "Verifying Terraform version and path:"
-          # Note the HYPHEN in terraform-path
-          which ${{ steps.setup.outputs.terraform-path }}
-          ${{ steps.setup.outputs.terraform-path }} version
-          echo "Verifying default terraform path:"
-          which terraform || echo "Default terraform not found"
-          terraform version || echo "Default terraform version check failed"
+          which terraform
+          terraform version
 
       - name: Terraform Init
         id: init
         run: |
           set -x
-          # Note the HYPHEN in terraform-path
-          ${{ steps.setup.outputs.terraform-path }} init \
+          terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
 
@@ -61,22 +62,19 @@ jobs:
         id: plan
         run: |
           set -x
-          # Note the HYPHEN in terraform-path
-          ${{ steps.setup.outputs.terraform-path }} plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
-
-      - name: Install jq
-        run: |
-          set -x
-          sudo apt-get update && sudo apt-get install -y jq
+          terraform plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
 
       - name: Terraform Import Login
         id: import-login
         run: |
           set -x
           echo "--- Import Login Step ---"
+          echo "Verifying terraform binary for this step:"
+          which terraform
+          terraform version
+
           echo "Getting REST_API_ID..."
-          # Note the HYPHEN in terraform-path
-          REST_API_ID=$(${{ steps.setup.outputs.terraform-path }} state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
+          REST_API_ID=$(terraform state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
           echo "REST_API_ID is: [${REST_API_ID}]"
 
           if [ -z "$REST_API_ID" ]; then
@@ -94,8 +92,7 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          # Note the HYPHEN in terraform-path
-          ${{ steps.setup.outputs.terraform-path }} import module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
+          terraform import module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
 
       - name: Terraform Import Get Upload URL
         id: import-get-upload-url
@@ -103,8 +100,7 @@ jobs:
           set -x
           echo "--- Import Get Upload URL Step ---"
           echo "Getting REST_API_ID..."
-          # Note the HYPHEN in terraform-path
-          REST_API_ID=$(${{ steps.setup.outputs.terraform-path }} state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
+          REST_API_ID=$(terraform state show -json 'module.api.aws_api_gateway_rest_api.api' | jq -r .values.id)
           echo "REST_API_ID is: [${REST_API_ID}]"
 
           if [ -z "$REST_API_ID" ]; then
@@ -122,12 +118,10 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          # Note the HYPHEN in terraform-path
-          ${{ steps.setup.outputs.terraform-path }} import module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
+          terraform import module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
 
       - name: Terraform Apply
         id: apply
         run: |
           set -x
-          # Note the HYPHEN in terraform-path
-          ${{ steps.setup.outputs.terraform-path }} apply -auto-approve
+          terraform apply -auto-approve
