@@ -22,3 +22,8 @@ output "api_invoke_url" {
   description = "The invoke URL for the API Gateway."
   value       = "https://${aws_api_gateway_rest_api.api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment_name}"
 }
+
+output "api_gateway_deployment_id" {
+  description = "The ID of the API Gateway deployment."
+  value       = aws_api_gateway_deployment.api_deployment.id
+}

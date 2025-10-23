@@ -1,7 +1,7 @@
 variable "media_allowed_cors_origins" {
   type        = list(string)
   description = "Allowed CORS origins for the media bucket."
-  default     = []
+  default     = ["*"]
 }
 
 variable "aws_region" {
