@@ -40,7 +40,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
+            -backend-config="lock_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
         
       - name: Force Unlock
         run: |
