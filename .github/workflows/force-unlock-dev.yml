@@ -18,7 +18,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: dev # All steps run inside the 'dev' folder
+        working-directory: infrastructure/dev # All steps run inside the 'dev' folder
 
     steps:
       - name: Checkout
