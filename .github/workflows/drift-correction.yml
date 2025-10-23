@@ -44,20 +44,19 @@ jobs:
           which jq
 
       - name: Verify Terraform Version & Capture Path
-        id: verify_tf # Give this step an ID
+        id: verify_tf
         run: |
           set -x
           echo "Verifying Terraform version and path:"
           TF_PATH=$(which terraform)
           echo "Terraform binary path is: $TF_PATH"
-          echo "terraform_path=$TF_PATH" >> "$GITHUB_OUTPUT" # Save the path as an output
+          echo "terraform_path=$TF_PATH" >> "$GITHUB_OUTPUT"
           $TF_PATH version
 
       - name: Terraform Init
         id: init
         run: |
           set -x
-          # Use the captured path from the previous step
           ${{ steps.verify_tf.outputs.terraform_path }} init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
@@ -66,28 +65,32 @@ jobs:
         id: plan
         run: |
           set -x
-          # Use the captured path
           ${{ steps.verify_tf.outputs.terraform_path }} plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
 
       - name: Terraform Import Login
         id: import-login
         run: |
           set -x
-          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }} # Get the correct TF path
+          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
           echo "--- Import Login Step ---"
           echo "Using Terraform binary at: $TF_PATH"
-          $TF_PATH version # Verify again just to be sure
+          $TF_PATH version
 
           echo "Getting REST_API_ID..."
-          # Explicitly use the TF_PATH variable for state show
-          STATE_JSON=$($TF_PATH state show -json 'module.api.aws_api_gateway_rest_api.api')
-          echo "State JSON fetched." # Add log to confirm state show ran
+          # Use 'show -json' instead of 'state show -json'
+          # This reads the state file directly
+          STATE_JSON=$($TF_PATH show -json)
+          echo "State JSON fetched via 'show -json'."
 
-          REST_API_ID=$(echo "$STATE_JSON" | jq -r .values.id)
+          # Extract the specific resource ID from the full state JSON
+          # Modify the jq query accordingly
+          REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
           echo "REST_API_ID is: [${REST_API_ID}]"
 
-          if [ -z "$REST_API_ID" ]; then
-            echo "::error::REST_API_ID is empty. Cannot proceed."
+          if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
+            echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
+            echo "Full state JSON:"
+            echo "$STATE_JSON" # Log the full state for debugging
             exit 1
           fi
 
@@ -101,27 +104,29 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          # Explicitly use the TF_PATH variable for import
           $TF_PATH import module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
 
       - name: Terraform Import Get Upload URL
         id: import-get-upload-url
         run: |
           set -x
-          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }} # Get the correct TF path
+          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
           echo "--- Import Get Upload URL Step ---"
           echo "Using Terraform binary at: $TF_PATH"
 
           echo "Getting REST_API_ID..."
-          # Explicitly use the TF_PATH variable
-          STATE_JSON=$($TF_PATH state show -json 'module.api.aws_api_gateway_rest_api.api')
-          echo "State JSON fetched."
-
-          REST_API_ID=$(echo "$STATE_JSON" | jq -r .values.id)
+          # Use 'show -json' instead of 'state show -json'
+          STATE_JSON=$($TF_PATH show -json)
+          echo "State JSON fetched via 'show -json'."
+          
+          # Extract the specific resource ID from the full state JSON
+          REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
           echo "REST_API_ID is: [${REST_API_ID}]"
 
-          if [ -z "$REST_API_ID" ]; then
-            echo "::error::REST_API_ID is empty. Cannot proceed."
+          if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
+            echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
+            echo "Full state JSON:"
+            echo "$STATE_JSON" # Log the full state for debugging
             exit 1
           fi
 
@@ -135,12 +140,10 @@ jobs:
           fi
 
           echo "Running terraform import..."
-          # Explicitly use the TF_PATH variable
           $TF_PATH import module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
 
       - name: Terraform Apply
         id: apply
         run: |
           set -x
-          # Use the captured path
           ${{ steps.verify_tf.outputs.terraform_path }} apply -auto-approve
