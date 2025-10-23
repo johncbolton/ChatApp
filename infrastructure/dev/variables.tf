@@ -6,6 +6,7 @@ variable "media_allowed_cors_origins" {
 
 variable "aws_region" {
   type        = string
+  defualt     = "us-east-1"
   description = "The AWS region."
 }
 
