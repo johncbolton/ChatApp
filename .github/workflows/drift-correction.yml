@@ -1,4 +1,4 @@
-name: Drift Correction
+name: Drift Detection and Correction
 
 on:
   workflow_dispatch:
@@ -11,12 +11,14 @@ jobs:
     defaults:
       run:
         working-directory: ./infrastructure/dev
-        shell: bash -e {0} # Ensures scripts exit on error
+        shell: bash -e {0}
 
     permissions:
       id-token: write
       contents: read
-      pull-requests: read
+
+    outputs:
+      plan_exitcode: ${{ steps.plan_1.outputs.exitcode }}
 
     steps:
       - name: Check out repository
@@ -34,20 +36,13 @@ jobs:
         id: setup
         uses: hashicorp/setup-terraform@v3.1.0
         with:
-          terraform_version: "1.9.2" # Or "latest"
-          terraform_wrapper: false
-
-      - name: Install jq
-        run: |
-          set -x
-          sudo apt-get update && sudo apt-get install -y jq
-          which jq
+          terraform_version: "1.9.2"
+          terraform_wrapper: false # Important for capturing exit codes directly
 
       - name: Verify Terraform Version & Capture Path
         id: verify_tf
         run: |
           set -x
-          echo "Verifying Terraform version and path:"
           TF_PATH=$(which terraform)
           echo "Terraform binary path is: $TF_PATH"
           echo "terraform_path=$TF_PATH" >> "$GITHUB_OUTPUT"
@@ -61,114 +56,159 @@ jobs:
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
 
-      - name: Terraform Plan Before Imports
-        id: plan_before_imports
+      - name: Terraform Plan 1 (Detect Drift)
+        id: plan_1
         run: |
           set -x
-          echo "--- Plan Before Imports Step ---"
-          ${{ steps.verify_tf.outputs.terraform_path }} plan \
-            -var="project_name=${{ vars.PROJECT_NAME }}" \
-            -no-color
+          echo "--- Running Initial Plan (Detect Drift) ---"
+          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
+          PLAN_ARGS="-var=project_name=${{ vars.PROJECT_NAME }} -no-color -detailed-exitcode"
 
-      - name: Terraform Import Login (Conditional)
-        id: import-login
+          # Run plan and capture exit code
+          set +e # Don't exit immediately if plan fails or shows drift
+          $TF_PATH plan $PLAN_ARGS > tfplan.txt
+          EXITCODE=$?
+          set -e # Re-enable exit on error
+
+          echo "Plan Exit Code: $EXITCODE"
+          echo "exitcode=$EXITCODE" >> "$GITHUB_OUTPUT"
+          
+          # Save plan output for analysis
+          PLAN_OUTPUT=$(cat tfplan.txt)
+          # Escape output for multiline environment variable
+          PLAN_OUTPUT="${PLAN_OUTPUT//'%'/'%25'}"
+          PLAN_OUTPUT="${PLAN_OUTPUT//$'\n'/'%0A'}"
+          PLAN_OUTPUT="${PLAN_OUTPUT//$'\r'/'%0D'}"
+          echo "plan_output=$PLAN_OUTPUT" >> "$GITHUB_OUTPUT"
+
+
+          if [ $EXITCODE -eq 1 ]; then
+            echo "::error::Terraform Plan failed with an error."
+            cat tfplan.txt # Show error output
+            exit 1
+          elif [ $EXITCODE -eq 0 ]; then
+             echo "No infrastructure changes detected."
+          elif [ $EXITCODE -eq 2 ]; then
+             echo "Infrastructure drift detected."
+             cat tfplan.txt # Show drift output
+          fi
+          
+          # Always exit 0 here so subsequent steps can analyze the exit code
+          exit 0 
+
+      - name: Analyze Plan and Move State (if needed)
+        id: analyze_and_move
+        # Only run if drift was detected (exit code 2)
+        if: steps.plan_1.outputs.exitcode == '2' 
         run: |
           set -x
           TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
-          RESOURCE_ADDRESS="module.api.aws_api_gateway_resource.login"
-          echo "--- Import Login Step ---"
-          echo "Using Terraform binary at: $TF_PATH"
+          PLAN_OUTPUT="${{ steps.plan_1.outputs.plan_output }}"
+          NEEDS_MOVE=false
 
-          # Check if resource already exists in state
-          echo "Checking if $RESOURCE_ADDRESS exists in state..."
-          if $TF_PATH state list | grep -q "^${RESOURCE_ADDRESS}$"; then
-            echo "$RESOURCE_ADDRESS already exists in Terraform state. Skipping import."
-          else
-            echo "$RESOURCE_ADDRESS not found in state. Proceeding with import..."
-            echo "Getting REST_API_ID..."
-            STATE_JSON=$($TF_PATH show -json)
-            echo "State JSON fetched via 'show -json'."
+          echo "--- Analyzing Plan for State Move ---"
+          
+          # Define source and destination addresses to check for
+          SOURCE_LOGIN_RESOURCE="aws_api_gateway_resource.login"
+          DEST_LOGIN_RESOURCE="module.api.aws_api_gateway_resource.login"
+          SOURCE_UPLOAD_RESOURCE="aws_api_gateway_resource.get_upload_url"
+          DEST_UPLOAD_RESOURCE="module.api.aws_api_gateway_resource.get_upload_url"
+          # Add other related resources (methods, integrations, deployment)
+          SOURCE_LOGIN_METHOD="aws_api_gateway_method.login"
+          DEST_LOGIN_METHOD="module.api.aws_api_gateway_method.login"
+          SOURCE_UPLOAD_METHOD="aws_api_gateway_method.get_upload_url"
+          DEST_UPLOAD_METHOD="module.api.aws_api_gateway_method.get_upload_url"
+          SOURCE_LOGIN_INTEGRATION="aws_api_gateway_integration.login"
+          DEST_LOGIN_INTEGRATION="module.api.aws_api_gateway_integration.login"
+          SOURCE_UPLOAD_INTEGRATION="aws_api_gateway_integration.get_upload_url"
+          DEST_UPLOAD_INTEGRATION="module.api.aws_api_gateway_integration.get_upload_url"
+          SOURCE_DEPLOYMENT="aws_api_gateway_deployment.api_deployment"
+          DEST_DEPLOYMENT="module.api.aws_api_gateway_deployment.api_deployment"
 
-            REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
-            echo "REST_API_ID is: [${REST_API_ID}]"
+          # Simple check: Does plan destroy source AND create destination? (Fragile!)
+          # Note: Need to echo the potentially multiline output for grep
+          if echo "$PLAN_OUTPUT" | grep -q "# ${SOURCE_LOGIN_RESOURCE} will be destroyed" && \
+             echo "$PLAN_OUTPUT" | grep -q "# ${DEST_LOGIN_RESOURCE} will be created"; then
+             echo "Plan indicates potential need to move login resource."
+             NEEDS_MOVE=true
+          fi
+          # Add similar checks for other resources if needed
 
-            if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
-              echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
-              echo "Full state JSON:"
-              echo "$STATE_JSON"
-              exit 1
+          if [ "$NEEDS_MOVE" = true ]; then
+            echo "Attempting state move..."
+            # Move resources, checking if source exists first
+            # (Adding checks for other resources as well)
+            if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_RESOURCE}$"; then
+               echo "Moving $SOURCE_LOGIN_RESOURCE to $DEST_LOGIN_RESOURCE"
+               $TF_PATH state mv "$SOURCE_LOGIN_RESOURCE" "$DEST_LOGIN_RESOURCE" || echo "State move failed for $SOURCE_LOGIN_RESOURCE"
+            else 
+               echo "$SOURCE_LOGIN_RESOURCE not found in state, skipping move."
             fi
 
-            echo "Getting LOGIN_RESOURCE_ID..."
-            LOGIN_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/login'].id" --output text)
-            echo "LOGIN_RESOURCE_ID is: [${LOGIN_RESOURCE_ID}]"
+            if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_RESOURCE}$"; then
+               echo "Moving $SOURCE_UPLOAD_RESOURCE to $DEST_UPLOAD_RESOURCE"
+               $TF_PATH state mv "$SOURCE_UPLOAD_RESOURCE" "$DEST_UPLOAD_RESOURCE" || echo "State move failed for $SOURCE_UPLOAD_RESOURCE"
+            else 
+               echo "$SOURCE_UPLOAD_RESOURCE not found in state, skipping move."
+            fi
+
+             if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_METHOD}$"; then
+               echo "Moving $SOURCE_LOGIN_METHOD to $DEST_LOGIN_METHOD"
+               $TF_PATH state mv "$SOURCE_LOGIN_METHOD" "$DEST_LOGIN_METHOD" || echo "State move failed for $SOURCE_LOGIN_METHOD"
+            else 
+               echo "$SOURCE_LOGIN_METHOD not found in state, skipping move."
+            fi
             
-            if [ -z "$LOGIN_RESOURCE_ID" ]; then
-              echo "::error::LOGIN_RESOURCE_ID is empty. Cannot proceed."
-              exit 1
+             if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_METHOD}$"; then
+               echo "Moving $SOURCE_UPLOAD_METHOD to $DEST_UPLOAD_METHOD"
+               $TF_PATH state mv "$SOURCE_UPLOAD_METHOD" "$DEST_UPLOAD_METHOD" || echo "State move failed for $SOURCE_UPLOAD_METHOD"
+            else 
+               echo "$SOURCE_UPLOAD_METHOD not found in state, skipping move."
             fi
 
-            echo "Running terraform import..."
-            $TF_PATH import \
-              -var="project_name=${{ vars.PROJECT_NAME }}" \
-              $RESOURCE_ADDRESS $REST_API_ID/$LOGIN_RESOURCE_ID
+             if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_INTEGRATION}$"; then
+               echo "Moving $SOURCE_LOGIN_INTEGRATION to $DEST_LOGIN_INTEGRATION"
+               $TF_PATH state mv "$SOURCE_LOGIN_INTEGRATION" "$DEST_LOGIN_INTEGRATION" || echo "State move failed for $SOURCE_LOGIN_INTEGRATION"
+            else 
+               echo "$SOURCE_LOGIN_INTEGRATION not found in state, skipping move."
+            fi
+
+             if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_INTEGRATION}$"; then
+               echo "Moving $SOURCE_UPLOAD_INTEGRATION to $DEST_UPLOAD_INTEGRATION"
+               $TF_PATH state mv "$SOURCE_UPLOAD_INTEGRATION" "$DEST_UPLOAD_INTEGRATION" || echo "State move failed for $SOURCE_UPLOAD_INTEGRATION"
+            else 
+               echo "$SOURCE_UPLOAD_INTEGRATION not found in state, skipping move."
+            fi
+            
+            if $TF_PATH state list | grep -q "^${SOURCE_DEPLOYMENT}$"; then
+               echo "Moving $SOURCE_DEPLOYMENT to $DEST_DEPLOYMENT"
+               $TF_PATH state mv "$SOURCE_DEPLOYMENT" "$DEST_DEPLOYMENT" || echo "State move failed for $SOURCE_DEPLOYMENT"
+            else 
+               echo "$SOURCE_DEPLOYMENT not found in state, skipping move."
+            fi
+            
+            echo "State move commands finished."
+            echo "needs_plan_2=true" >> "$GITHUB_OUTPUT" # Signal that Plan 2 should run
+          else
+            echo "Plan analysis did not indicate a need for state move."
+            echo "needs_plan_2=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Terraform Import Get Upload URL (Conditional)
-        id: import-get-upload-url
+      - name: Terraform Plan 2 (After Move, if applicable)
+        id: plan_2
+        # Only run if state move was attempted
+        if: steps.analyze_and_move.outputs.needs_plan_2 == 'true' 
         run: |
           set -x
-          TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
-          RESOURCE_ADDRESS="module.api.aws_api_gateway_resource.get_upload_url"
-          echo "--- Import Get Upload URL Step ---"
-          echo "Using Terraform binary at: $TF_PATH"
-
-          # Check if resource already exists in state
-          echo "Checking if $RESOURCE_ADDRESS exists in state..."
-          if $TF_PATH state list | grep -q "^${RESOURCE_ADDRESS}$"; then
-            echo "$RESOURCE_ADDRESS already exists in Terraform state. Skipping import."
-          else
-            echo "$RESOURCE_ADDRESS not found in state. Proceeding with import..."
-            echo "Getting REST_API_ID..."
-            STATE_JSON=$($TF_PATH show -json)
-            echo "State JSON fetched via 'show -json'."
-            
-            REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
-            echo "REST_API_ID is: [${REST_API_ID}]"
-
-            if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
-              echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
-              echo "Full state JSON:"
-              echo "$STATE_JSON"
-              exit 1
-            fi
-
-            echo "Getting GET_UPLOAD_URL_RESOURCE_ID..."
-            GET_UPLOAD_URL_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/get-upload-url'].id" --output text)
-            echo "GET_UPLOAD_URL_RESOURCE_ID is: [${GET_UPLOAD_URL_RESOURCE_ID}]"
-            
-            if [ -z "$GET_UPLOAD_URL_RESOURCE_ID" ]; then
-              echo "::error::GET_UPLOAD_URL_RESOURCE_ID is empty. Cannot proceed."
-              exit 1
-            fi
-
-            echo "Running terraform import..."
-            $TF_PATH import \
-              -var="project_name=${{ vars.PROJECT_NAME }}" \
-              $RESOURCE_ADDRESS $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
-          fi
-
-      - name: Terraform Plan After Imports
-        id: plan_after_imports
-        run: |
-          set -x
-          echo "--- Plan After Imports Step ---"
+          echo "--- Plan After State Move Step ---"
           ${{ steps.verify_tf.outputs.terraform_path }} plan \
             -var="project_name=${{ vars.PROJECT_NAME }}" \
             -no-color
 
       - name: Terraform Apply
         id: apply
+        # Only apply if the initial plan didn't fail (exit code 0 or 2)
+        if: steps.plan_1.outputs.exitcode != '1' 
         run: |
           set -x
           echo "--- Apply Step ---"
