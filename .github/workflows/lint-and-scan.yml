@@ -40,20 +40,13 @@ jobs:
         with:
           tflint_version: latest
 
-      - name: Initialize Terraform (for validate)
+      - name: Initialize and Validate Terraform
         run: |
-          terraform -chdir=dev init -backend=false
-          terraform -chdir=uat init -backend=false
-          terraform -chdir=prod init -backend=false
+          terraform init -backend=false
+          terraform validate
         
       - name: Check Terraform Formatting
         run: terraform fmt -check -recursive
-
-      - name: Validate Terraform Syntax (all envs)
-        run: |
-          terraform -chdir=dev validate
-          terraform -chdir=uat validate
-          terraform -chdir=prod validate
 
       - name: Run TFLint
         run: tflint --recursive
