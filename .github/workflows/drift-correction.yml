@@ -37,7 +37,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3.1.0
         with:
           terraform_version: "1.9.2"
-          terraform_wrapper: false # Important for capturing exit codes directly
+          terraform_wrapper: false
 
       - name: Verify Terraform Version & Capture Path
         id: verify_tf
@@ -64,7 +64,6 @@ jobs:
           TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
           PLAN_ARGS="-var=project_name=${{ vars.PROJECT_NAME }} -no-color -detailed-exitcode"
 
-          # Run plan and capture exit code
           set +e # Don't exit immediately if plan fails or shows drift
           $TF_PATH plan $PLAN_ARGS > tfplan.txt
           EXITCODE=$?
@@ -73,14 +72,10 @@ jobs:
           echo "Plan Exit Code: $EXITCODE"
           echo "exitcode=$EXITCODE" >> "$GITHUB_OUTPUT"
           
-          # Save plan output for analysis
-          PLAN_OUTPUT=$(cat tfplan.txt)
-          # Escape output for multiline environment variable
-          PLAN_OUTPUT="${PLAN_OUTPUT//'%'/'%25'}"
-          PLAN_OUTPUT="${PLAN_OUTPUT//$'\n'/'%0A'}"
-          PLAN_OUTPUT="${PLAN_OUTPUT//$'\r'/'%0D'}"
-          echo "plan_output=$PLAN_OUTPUT" >> "$GITHUB_OUTPUT"
-
+          # Use GitHub's recommended multiline output syntax
+          echo "plan_output<<EOF" >> "$GITHUB_OUTPUT"
+          cat tfplan.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
           if [ $EXITCODE -eq 1 ]; then
             echo "::error::Terraform Plan failed with an error."
@@ -99,21 +94,22 @@ jobs:
       - name: Analyze Plan and Move State (if needed)
         id: analyze_and_move
         # Only run if drift was detected (exit code 2)
-        if: steps.plan_1.outputs.exitcode == '2' 
+        if: steps.plan_1.outputs.exitcode == '2'
+        # Pass the plan output as an env var to avoid shell substitution errors
+        env:
+          PLAN_OUTPUT: ${{ steps.plan_1.outputs.plan_output }}
         run: |
           set -x
           TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
-          PLAN_OUTPUT="${{ steps.plan_1.outputs.plan_output }}"
           NEEDS_MOVE=false
 
           echo "--- Analyzing Plan for State Move ---"
           
-          # Define source and destination addresses to check for
+          # Define source and destination addresses
           SOURCE_LOGIN_RESOURCE="aws_api_gateway_resource.login"
           DEST_LOGIN_RESOURCE="module.api.aws_api_gateway_resource.login"
           SOURCE_UPLOAD_RESOURCE="aws_api_gateway_resource.get_upload_url"
           DEST_UPLOAD_RESOURCE="module.api.aws_api_gateway_resource.get_upload_url"
-          # Add other related resources (methods, integrations, deployment)
           SOURCE_LOGIN_METHOD="aws_api_gateway_method.login"
           DEST_LOGIN_METHOD="module.api.aws_api_gateway_method.login"
           SOURCE_UPLOAD_METHOD="aws_api_gateway_method.get_upload_url"
@@ -125,8 +121,7 @@ jobs:
           SOURCE_DEPLOYMENT="aws_api_gateway_deployment.api_deployment"
           DEST_DEPLOYMENT="module.api.aws_api_gateway_deployment.api_deployment"
 
-          # Simple check: Does plan destroy source AND create destination? (Fragile!)
-          # Note: Need to echo the potentially multiline output for grep
+          # Check if plan output (now in $PLAN_OUTPUT env var) contains the move pattern
           if echo "$PLAN_OUTPUT" | grep -q "# ${SOURCE_LOGIN_RESOURCE} will be destroyed" && \
              echo "$PLAN_OUTPUT" | grep -q "# ${DEST_LOGIN_RESOURCE} will be created"; then
              echo "Plan indicates potential need to move login resource."
@@ -137,7 +132,6 @@ jobs:
           if [ "$NEEDS_MOVE" = true ]; then
             echo "Attempting state move..."
             # Move resources, checking if source exists first
-            # (Adding checks for other resources as well)
             if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_RESOURCE}$"; then
                echo "Moving $SOURCE_LOGIN_RESOURCE to $DEST_LOGIN_RESOURCE"
                $TF_PATH state mv "$SOURCE_LOGIN_RESOURCE" "$DEST_LOGIN_RESOURCE" || echo "State move failed for $SOURCE_LOGIN_RESOURCE"
