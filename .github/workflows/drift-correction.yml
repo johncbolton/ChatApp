@@ -61,7 +61,6 @@ jobs:
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
 
-      # First Plan Step (Before Imports)
       - name: Terraform Plan Before Imports
         id: plan_before_imports
         run: |
@@ -71,79 +70,94 @@ jobs:
             -var="project_name=${{ vars.PROJECT_NAME }}" \
             -no-color
 
-      - name: Terraform Import Login
+      - name: Terraform Import Login (Conditional)
         id: import-login
         run: |
           set -x
           TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
+          RESOURCE_ADDRESS="module.api.aws_api_gateway_resource.login"
           echo "--- Import Login Step ---"
           echo "Using Terraform binary at: $TF_PATH"
 
-          echo "Getting REST_API_ID..."
-          STATE_JSON=$($TF_PATH show -json)
-          echo "State JSON fetched via 'show -json'."
+          # Check if resource already exists in state
+          echo "Checking if $RESOURCE_ADDRESS exists in state..."
+          if $TF_PATH state list | grep -q "^${RESOURCE_ADDRESS}$"; then
+            echo "$RESOURCE_ADDRESS already exists in Terraform state. Skipping import."
+          else
+            echo "$RESOURCE_ADDRESS not found in state. Proceeding with import..."
+            echo "Getting REST_API_ID..."
+            STATE_JSON=$($TF_PATH show -json)
+            echo "State JSON fetched via 'show -json'."
 
-          REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
-          echo "REST_API_ID is: [${REST_API_ID}]"
+            REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
+            echo "REST_API_ID is: [${REST_API_ID}]"
 
-          if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
-            echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
-            echo "Full state JSON:"
-            echo "$STATE_JSON"
-            exit 1
+            if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
+              echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
+              echo "Full state JSON:"
+              echo "$STATE_JSON"
+              exit 1
+            fi
+
+            echo "Getting LOGIN_RESOURCE_ID..."
+            LOGIN_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/login'].id" --output text)
+            echo "LOGIN_RESOURCE_ID is: [${LOGIN_RESOURCE_ID}]"
+            
+            if [ -z "$LOGIN_RESOURCE_ID" ]; then
+              echo "::error::LOGIN_RESOURCE_ID is empty. Cannot proceed."
+              exit 1
+            fi
+
+            echo "Running terraform import..."
+            $TF_PATH import \
+              -var="project_name=${{ vars.PROJECT_NAME }}" \
+              $RESOURCE_ADDRESS $REST_API_ID/$LOGIN_RESOURCE_ID
           fi
 
-          echo "Getting LOGIN_RESOURCE_ID..."
-          LOGIN_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/login'].id" --output text)
-          echo "LOGIN_RESOURCE_ID is: [${LOGIN_RESOURCE_ID}]"
-          
-          if [ -z "$LOGIN_RESOURCE_ID" ]; then
-            echo "::error::LOGIN_RESOURCE_ID is empty. Cannot proceed."
-            exit 1
-          fi
-
-          echo "Running terraform import..."
-          $TF_PATH import \
-            -var="project_name=${{ vars.PROJECT_NAME }}" \
-            module.api.aws_api_gateway_resource.login $REST_API_ID/$LOGIN_RESOURCE_ID
-
-      - name: Terraform Import Get Upload URL
+      - name: Terraform Import Get Upload URL (Conditional)
         id: import-get-upload-url
         run: |
           set -x
           TF_PATH=${{ steps.verify_tf.outputs.terraform_path }}
+          RESOURCE_ADDRESS="module.api.aws_api_gateway_resource.get_upload_url"
           echo "--- Import Get Upload URL Step ---"
           echo "Using Terraform binary at: $TF_PATH"
 
-          echo "Getting REST_API_ID..."
-          STATE_JSON=$($TF_PATH show -json)
-          echo "State JSON fetched via 'show -json'."
-          
-          REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
-          echo "REST_API_ID is: [${REST_API_ID}]"
+          # Check if resource already exists in state
+          echo "Checking if $RESOURCE_ADDRESS exists in state..."
+          if $TF_PATH state list | grep -q "^${RESOURCE_ADDRESS}$"; then
+            echo "$RESOURCE_ADDRESS already exists in Terraform state. Skipping import."
+          else
+            echo "$RESOURCE_ADDRESS not found in state. Proceeding with import..."
+            echo "Getting REST_API_ID..."
+            STATE_JSON=$($TF_PATH show -json)
+            echo "State JSON fetched via 'show -json'."
+            
+            REST_API_ID=$(echo "$STATE_JSON" | jq -r '.values.root_module.child_modules[] | select(.address=="module.api") | .resources[] | select(.address=="module.api.aws_api_gateway_rest_api.api") | .values.id')
+            echo "REST_API_ID is: [${REST_API_ID}]"
 
-          if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
-            echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
-            echo "Full state JSON:"
-            echo "$STATE_JSON"
-            exit 1
+            if [ -z "$REST_API_ID" ] || [ "$REST_API_ID" == "null" ]; then
+              echo "::error::REST_API_ID not found in state JSON or is empty. Cannot proceed."
+              echo "Full state JSON:"
+              echo "$STATE_JSON"
+              exit 1
+            fi
+
+            echo "Getting GET_UPLOAD_URL_RESOURCE_ID..."
+            GET_UPLOAD_URL_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/get-upload-url'].id" --output text)
+            echo "GET_UPLOAD_URL_RESOURCE_ID is: [${GET_UPLOAD_URL_RESOURCE_ID}]"
+            
+            if [ -z "$GET_UPLOAD_URL_RESOURCE_ID" ]; then
+              echo "::error::GET_UPLOAD_URL_RESOURCE_ID is empty. Cannot proceed."
+              exit 1
+            fi
+
+            echo "Running terraform import..."
+            $TF_PATH import \
+              -var="project_name=${{ vars.PROJECT_NAME }}" \
+              $RESOURCE_ADDRESS $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
           fi
 
-          echo "Getting GET_UPLOAD_URL_RESOURCE_ID..."
-          GET_UPLOAD_URL_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='/get-upload-url'].id" --output text)
-          echo "GET_UPLOAD_URL_RESOURCE_ID is: [${GET_UPLOAD_URL_RESOURCE_ID}]"
-          
-          if [ -z "$GET_UPLOAD_URL_RESOURCE_ID" ]; then
-            echo "::error::GET_UPLOAD_URL_RESOURCE_ID is empty. Cannot proceed."
-            exit 1
-          fi
-
-          echo "Running terraform import..."
-          $TF_PATH import \
-            -var="project_name=${{ vars.PROJECT_NAME }}" \
-            module.api.aws_api_gateway_resource.get_upload_url $REST_API_ID/$GET_UPLOAD_URL_RESOURCE_ID
-
-      # Second Plan Step (After Imports)
       - name: Terraform Plan After Imports
         id: plan_after_imports
         run: |
