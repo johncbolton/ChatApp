@@ -4,8 +4,6 @@ name: 'Scan'
 
 on: [push, pull_request]
 
-#Job 1
-
 jobs:
   gitleaks-scan:
     name: Scan for Secrets (gitleaks)
@@ -21,3 +19,4 @@ jobs:
         env:
           GITLEAKS_LEAK_EXIT_CODE: "1"
 
+  
