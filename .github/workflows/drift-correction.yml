@@ -72,30 +72,26 @@ jobs:
           echo "Plan Exit Code: $EXITCODE"
           echo "exitcode=$EXITCODE" >> "$GITHUB_OUTPUT"
           
-          # Use GitHub's recommended multiline output syntax
           echo "plan_output<<EOF" >> "$GITHUB_OUTPUT"
           cat tfplan.txt >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
           if [ $EXITCODE -eq 1 ]; then
             echo "::error::Terraform Plan failed with an error."
-            cat tfplan.txt # Show error output
+            cat tfplan.txt
             exit 1
           elif [ $EXITCODE -eq 0 ]; then
              echo "No infrastructure changes detected."
           elif [ $EXITCODE -eq 2 ]; then
              echo "Infrastructure drift detected."
-             cat tfplan.txt # Show drift output
+             cat tfplan.txt
           fi
           
-          # Always exit 0 here so subsequent steps can analyze the exit code
           exit 0 
 
       - name: Analyze Plan and Move State (if needed)
         id: analyze_and_move
-        # Only run if drift was detected (exit code 2)
-        if: steps.plan_1.outputs.exitcode == '2'
-        # Pass the plan output as an env var to avoid shell substitution errors
+        if: steps.plan_1.outputs.exitcode == '2' 
         env:
           PLAN_OUTPUT: ${{ steps.plan_1.outputs.plan_output }}
         run: |
@@ -105,7 +101,6 @@ jobs:
 
           echo "--- Analyzing Plan for State Move ---"
           
-          # Define source and destination addresses
           SOURCE_LOGIN_RESOURCE="aws_api_gateway_resource.login"
           DEST_LOGIN_RESOURCE="module.api.aws_api_gateway_resource.login"
           SOURCE_UPLOAD_RESOURCE="aws_api_gateway_resource.get_upload_url"
@@ -121,60 +116,60 @@ jobs:
           SOURCE_DEPLOYMENT="aws_api_gateway_deployment.api_deployment"
           DEST_DEPLOYMENT="module.api.aws_api_gateway_deployment.api_deployment"
 
-          # Check if plan output (now in $PLAN_OUTPUT env var) contains the move pattern
+          # Check if plan output contains the move pattern
           if echo "$PLAN_OUTPUT" | grep -q "# ${SOURCE_LOGIN_RESOURCE} will be destroyed" && \
              echo "$PLAN_OUTPUT" | grep -q "# ${DEST_LOGIN_RESOURCE} will be created"; then
              echo "Plan indicates potential need to move login resource."
              NEEDS_MOVE=true
           fi
-          # Add similar checks for other resources if needed
-
+          
           if [ "$NEEDS_MOVE" = true ]; then
             echo "Attempting state move..."
-            # Move resources, checking if source exists first
-            if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_RESOURCE}$"; then
+            
+            # Use grep without strict anchors (^) and ($)
+            if $TF_PATH state list | grep -q "${SOURCE_LOGIN_RESOURCE}"; then
                echo "Moving $SOURCE_LOGIN_RESOURCE to $DEST_LOGIN_RESOURCE"
                $TF_PATH state mv "$SOURCE_LOGIN_RESOURCE" "$DEST_LOGIN_RESOURCE" || echo "State move failed for $SOURCE_LOGIN_RESOURCE"
             else 
                echo "$SOURCE_LOGIN_RESOURCE not found in state, skipping move."
             fi
 
-            if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_RESOURCE}$"; then
+            if $TF_PATH state list | grep -q "${SOURCE_UPLOAD_RESOURCE}"; then
                echo "Moving $SOURCE_UPLOAD_RESOURCE to $DEST_UPLOAD_RESOURCE"
                $TF_PATH state mv "$SOURCE_UPLOAD_RESOURCE" "$DEST_UPLOAD_RESOURCE" || echo "State move failed for $SOURCE_UPLOAD_RESOURCE"
             else 
                echo "$SOURCE_UPLOAD_RESOURCE not found in state, skipping move."
             fi
 
-             if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_METHOD}$"; then
+             if $TF_PATH state list | grep -q "${SOURCE_LOGIN_METHOD}"; then
                echo "Moving $SOURCE_LOGIN_METHOD to $DEST_LOGIN_METHOD"
                $TF_PATH state mv "$SOURCE_LOGIN_METHOD" "$DEST_LOGIN_METHOD" || echo "State move failed for $SOURCE_LOGIN_METHOD"
             else 
                echo "$SOURCE_LOGIN_METHOD not found in state, skipping move."
             fi
             
-             if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_METHOD}$"; then
+             if $TF_PATH state list | grep -q "${SOURCE_UPLOAD_METHOD}"; then
                echo "Moving $SOURCE_UPLOAD_METHOD to $DEST_UPLOAD_METHOD"
                $TF_PATH state mv "$SOURCE_UPLOAD_METHOD" "$DEST_UPLOAD_METHOD" || echo "State move failed for $SOURCE_UPLOAD_METHOD"
             else 
                echo "$SOURCE_UPLOAD_METHOD not found in state, skipping move."
             fi
 
-             if $TF_PATH state list | grep -q "^${SOURCE_LOGIN_INTEGRATION}$"; then
+             if $TF_PATH state list | grep -q "${SOURCE_LOGIN_INTEGRATION}"; then
                echo "Moving $SOURCE_LOGIN_INTEGRATION to $DEST_LOGIN_INTEGRATION"
                $TF_PATH state mv "$SOURCE_LOGIN_INTEGRATION" "$DEST_LOGIN_INTEGRATION" || echo "State move failed for $SOURCE_LOGIN_INTEGRATION"
             else 
                echo "$SOURCE_LOGIN_INTEGRATION not found in state, skipping move."
             fi
 
-             if $TF_PATH state list | grep -q "^${SOURCE_UPLOAD_INTEGRATION}$"; then
+             if $TF_PATH state list | grep -q "${SOURCE_UPLOAD_INTEGRATION}"; then
                echo "Moving $SOURCE_UPLOAD_INTEGRATION to $DEST_UPLOAD_INTEGRATION"
                $TF_PATH state mv "$SOURCE_UPLOAD_INTEGRATION" "$DEST_UPLOAD_INTEGRATION" || echo "State move failed for $SOURCE_UPLOAD_INTEGRATION"
             else 
                echo "$SOURCE_UPLOAD_INTEGRATION not found in state, skipping move."
             fi
             
-            if $TF_PATH state list | grep -q "^${SOURCE_DEPLOYMENT}$"; then
+            if $TF_PATH state list | grep -q "${SOURCE_DEPLOYMENT}"; then
                echo "Moving $SOURCE_DEPLOYMENT to $DEST_DEPLOYMENT"
                $TF_PATH state mv "$SOURCE_DEPLOYMENT" "$DEST_DEPLOYMENT" || echo "State move failed for $SOURCE_DEPLOYMENT"
             else 
@@ -182,7 +177,7 @@ jobs:
             fi
             
             echo "State move commands finished."
-            echo "needs_plan_2=true" >> "$GITHUB_OUTPUT" # Signal that Plan 2 should run
+            echo "needs_plan_2=true" >> "$GITHUB_OUTPUT"
           else
             echo "Plan analysis did not indicate a need for state move."
             echo "needs_plan_2=false" >> "$GITHUB_OUTPUT"
@@ -190,7 +185,6 @@ jobs:
 
       - name: Terraform Plan 2 (After Move, if applicable)
         id: plan_2
-        # Only run if state move was attempted
         if: steps.analyze_and_move.outputs.needs_plan_2 == 'true' 
         run: |
           set -x
@@ -201,7 +195,6 @@ jobs:
 
       - name: Terraform Apply
         id: apply
-        # Only apply if the initial plan didn't fail (exit code 0 or 2)
         if: steps.plan_1.outputs.exitcode != '1' 
         run: |
           set -x
