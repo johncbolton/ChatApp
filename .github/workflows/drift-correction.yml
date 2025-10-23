@@ -30,7 +30,7 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v3.1.0
         with:
           terraform_version: "1.7.5"
           terraform_wrapper: false  # ensures CLI commands run directly
