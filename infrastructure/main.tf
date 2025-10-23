@@ -13,7 +13,7 @@ terraform {
   backend "s3" {
     region  = "us-east-1"
     encrypt = true
-    key     = "terraform.tfstate" 
+    key     = "terraform.tfstate"
   }
 }
 
@@ -21,21 +21,8 @@ provider "aws" {
   region = var.aws_region
 }
 
-variable "aws_region" {
-  type        = string
-  description = "The AWS region to deploy resources to."
-}
-
-variable "project_name" {
-  type        = string
-  description = "The unique name for the project (e.g., 'john-chatapp')."
-}
-
-variable "media_allowed_cors_origins" {
-  type        = list(string)
-  description = "A list of origins allowed to make CORS requests to the media bucket."
-  default     = ["*"]
-}
+# The variable blocks were removed from this file.
+# They should exist in your "dev/variables.tf" file.
 
 module "identity" {
   source = "../modules/identity"
@@ -44,7 +31,7 @@ module "identity" {
   environment_name = "dev"
 }
 
-module "media-storage" {
+module "media_storage" {
   source = "../modules/media-storage"
 
   project_name           = var.project_name
@@ -67,10 +54,3 @@ module "api" {
   media_bucket_arn         = module.media_storage.media_bucket_arn
   media_metadata_table_arn = module.media_storage.media_metadata_table_arn
 }
-
-
-  media_bucket_name        = module.media_storage.media_bucket_name
-  media_bucket_arn         = module.media_storage.media_bucket_arn
-  media_metadata_table_arn = module.media_storage.media_metadata_table_arn
-}
-
