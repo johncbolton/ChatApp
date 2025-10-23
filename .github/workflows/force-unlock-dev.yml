@@ -1,0 +1,48 @@
+name: 'Manual: Force Unlock Dev State'
+
+on:
+  workflow_dispatch:
+    inputs:
+      lock_id:
+        description: 'The Lock ID from the "ConditionalCheckFailedException" error log'
+        required: true
+        type: string
+
+jobs:
+  force-unlock:
+    name: Force Unlock Dev State
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read  # Required to check out code
+
+    defaults:
+      run:
+        working-directory: dev # All steps run inside the 'dev' folder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true # Fetch the 'modules' repo
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_IAM_ROLE_NAME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
+        
+      - name: Force Unlock
+        run: |
+          echo "Attempting to force-unlock Lock ID: ${{ github.event.inputs.lock_id }}"
+          terraform force-unlock -force ${{ github.event.inputs.lock_id }}
