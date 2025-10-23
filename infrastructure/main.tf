@@ -22,7 +22,7 @@ module "identity" {
 }
 
 
-module "media_storage" {
+module "media-storage" {
   source = "../modules/media-storage" 
   project_name           = var.project_name
   environment_name       = "dev"
