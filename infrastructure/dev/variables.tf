@@ -1,7 +1,12 @@
+variable "media_allowed_cors_origins" {
+  type        = list(string)
+  description = "Allowed CORS origins for the media bucket."
+  default     = []
+}
+
 variable "aws_region" {
   type        = string
-  description = "The AWS region to deploy resources to."
-  default     = "us-east-1"
+  description = "The AWS region."
 }
 
 variable "project_name" {

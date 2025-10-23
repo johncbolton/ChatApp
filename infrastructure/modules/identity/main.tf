@@ -58,15 +58,7 @@ resource "aws_dynamodb_table" "user_profile_table" {
 }
 
 # Output
-output "cognito_user_pool_id" {
-  value = aws_cognito_user_pool.user_pool.id
-}
-
 output "cognito_app_client_id" {
   value = aws_cognito_user_pool_client.app_client.id
-}
-
-output "user_profile_table_name" {
-  value = aws_dynamodb_table.user_profile_table.name
 }
 

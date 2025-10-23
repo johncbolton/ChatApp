@@ -1,11 +1,11 @@
 output "user_profile_table_name" {
   description = "The name of the user profile DynamoDB table."
-  value       = aws_dynamodb_table.user_profile.name
+  value       = aws_dynamodb_table.user_profile_table.name
 }
 
 output "user_profile_table_arn" {
   description = "The ARN of the user profile DynamoDB table."
-  value       = aws_dynamodb_table.user_profile.arn
+  value       = aws_dynamodb_table.user_profile_table.arn
 }
 
 output "cognito_user_pool_id" {

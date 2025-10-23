@@ -38,3 +38,13 @@ variable "media_metadata_table_arn" {
   type        = string
   description = "The ARN of the media metadata DynamoDB table."
 }
+
+variable "aws_region" {
+  type        = string
+  description = "The AWS region."
+}
+
+variable "api_gateway_deployment_id" {
+  type        = string
+  description = "The ID of the API Gateway deployment."
+}

@@ -132,39 +132,12 @@ resource "aws_lambda_function" "get_upload_url" {
 
 # Wire API Gateway
 
-# login Endpoint
-module "api_gateway_login" {
-  source = "terraform-aws-modules/apigw-lambda/aws"
-  version = "5.0.0" # Use a pinned version
-
-  function_name = aws_lambda_function.login.function_name
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  path          = "/login"
-  method        = "POST"
-}
-
-# Get Endpoint 
-module "api_gateway_upload_url" {
-  source = "terraform-aws-modules/apigw-lambda/aws"
-  version = "5.0.0"
-
-  function_name = aws_lambda_function.get_upload_url.function_name
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  path          = "/get-upload-url"
-  method        = "GET"
-}
 
 
 # Deploy the API 
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
-  triggers = {
-    redeployment = sha1(jsonencode([
-      module.api_gateway_login.api_gateway_integration_id,
-      module.api_gateway_upload_url.api_gateway_integration_id
-    ]))
-  }
 
   lifecycle {
     create_before_destroy = true
@@ -172,7 +145,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 }
 
 resource "aws_api_gateway_stage" "api_stage" {
-  deployment_id = aws_api_gateway_deployment.api_deployment.id
+  deployment_id = var.api_gateway_deployment_id
   rest_api_id   = aws_api_gateway_rest_api.api.id
   stage_name    = var.environment_name # Stage name will be 'dev', 'prod', etc.
 }
