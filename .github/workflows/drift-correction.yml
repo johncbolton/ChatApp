@@ -41,7 +41,7 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color
+        run: terraform plan -var="project_name=${{ vars.PROJECT_NAME }}" -no-color
 
       - name: Terraform Import Login
         id: import-login
