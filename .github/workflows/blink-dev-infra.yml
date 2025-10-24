@@ -1,0 +1,60 @@
+name: Blink Dev Infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'The action to perform: "apply" or "destroy"'
+        required: true
+        type: string
+
+jobs:
+  blink-dev-environment:
+    name: Blink Dev Environment
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./infrastructure/dev
+
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_DEV }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_DEV }}"
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            terraform plan -destroy -out=tfplan \
+              -var="project_name=${{ vars.PROJECT_NAME }}"
+          else
+            terraform plan -out=tfplan \
+              -var="project_name=${{ vars.PROJECT_NAME }}"
+          fi
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve tfplan
