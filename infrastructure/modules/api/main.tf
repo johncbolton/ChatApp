@@ -93,17 +93,17 @@ data "archive_file" "login_lambda_zip" {
 }
 
 resource "aws_lambda_function" "login" {
-  function_name = "${var.project_name}-login-${var.environment_name}"
-  role          = aws_iam_role.lambda_exec_role.arn
-  handler       = "login.lambda_handler" # File is 'login.py', function is 'lambda_handler'
-  runtime       = "python3.11"
-  filename      = data.archive_file.login_lambda_zip.output_path
+  function_name    = "${var.project_name}-login-${var.environment_name}"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "login.lambda_handler" # File is 'login.py', function is 'lambda_handler'
+  runtime          = "python3.11"
+  filename         = data.archive_file.login_lambda_zip.output_path
   source_code_hash = data.archive_file.login_lambda_zip.output_base64sha256
 
   environment {
     variables = {
       COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-      COGNITO_CLIENT_ID    = var.cognito_client_id 
+      COGNITO_CLIENT_ID    = var.cognito_client_id
     }
   }
 }
@@ -117,11 +117,11 @@ data "archive_file" "upload_url_lambda_zip" {
 }
 
 resource "aws_lambda_function" "get_upload_url" {
-  function_name = "${var.project_name}-get-upload-url-${var.environment_name}"
-  role          = aws_iam_role.lambda_exec_role.arn
-  handler       = "upload_url.lambda_handler" # File is 'upload_url.py'
-  runtime       = "python3.11"
-  filename      = data.archive_file.upload_url_lambda_zip.output_path
+  function_name    = "${var.project_name}-get-upload-url-${var.environment_name}"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "upload_url.lambda_handler" # File is 'upload_url.py'
+  runtime          = "python3.11"
+  filename         = data.archive_file.upload_url_lambda_zip.output_path
   source_code_hash = data.archive_file.upload_url_lambda_zip.output_base64sha256
 
   environment {

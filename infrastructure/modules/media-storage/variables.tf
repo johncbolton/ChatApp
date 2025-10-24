@@ -11,5 +11,5 @@ variable "environment_name" {
 variable "allowed_cors_origins" {
   type        = list(string)
   description = "A list of origins (URLs) allowed to upload to the S3 bucket."
-  default     = ["*"] 
+  default     = ["*"]
 }

@@ -55,9 +55,9 @@ resource "aws_s3_bucket_cors_configuration" "media_bucket_cors" {
 resource "aws_dynamodb_table" "media_metadata" {
   name = "${var.project_name}-media-metadata-${var.environment_name}"
 
-  billing_mode   = "PAY_PER_REQUEST" 
-  hash_key       = "mediaID"         
-  range_key      = "userID"          
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "mediaID"
+  range_key    = "userID"
 
   attribute {
     name = "mediaID"
