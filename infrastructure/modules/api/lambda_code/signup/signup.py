@@ -3,6 +3,8 @@ import os
 import json
 import re
 
+from botocore.exceptions import ClientError
+
 def lambda_handler(event, context):
     
     region = os.environ.get('AWS_REGION')
@@ -51,6 +53,7 @@ def lambda_handler(event, context):
             'body': json.dumps({'message': 'Password must be at least 8 characters.'})
         }
 
+    user_sub = None
     try:
         response = cognito.sign_up(
             ClientId=COGNITO_CLIENT_ID,
@@ -63,15 +66,26 @@ def lambda_handler(event, context):
         
         user_sub = response['UserSub']
 
-        table = dynamodb.Table(USER_PROFILE_TABLE)
-        table.put_item(
-            Item={
-                'userID': user_sub,
-                'username': username,
-                'email': email,
-                'createdAt': json.dumps(context.aws_request_id)
+        # This is the new, specific try/except block for DynamoDB
+        try:
+            table = dynamodb.Table(USER_PROFILE_TABLE)
+            table.put_item(
+                Item={
+                    'userID': user_sub,
+                    'username': username,
+                    'email': email,
+                    'createdAt': json.dumps(context.aws_request_id)
+                }
+            )
+        
+        except ClientError as db_error:
+            # This is the error your test is looking for!
+            print(f"DynamoDB Error: {db_error}")
+            # Here we are using 'error' as the key to match the test
+            return {
+                'statusCode': 500,
+                'body': json.dumps({'error': 'User created in Cognito, but failed to create user profile.'})
             }
-        )
 
         return {
             'statusCode': 201,
@@ -92,6 +106,7 @@ def lambda_handler(event, context):
             'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
         }
     except Exception as e:
+        # This is now a general catch-all for other unexpected errors
         return {
             'statusCode': 500,
             'body': json.dumps({'message': f'An internal server error occurred: {str(e)}'})
