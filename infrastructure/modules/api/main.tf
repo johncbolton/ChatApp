@@ -110,7 +110,7 @@ resource "aws_lambda_function" "login" {
   runtime          = "python3.11"
   filename         = data.archive_file.login_lambda_zip.output_path
   source_code_hash = data.archive_file.login_lambda_zip.output_base64sha256
-  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
+  timeout          = 30
 
   environment {
     variables = {
@@ -134,7 +134,7 @@ resource "aws_lambda_function" "signup" {
   runtime          = "python3.11"
   filename         = data.archive_file.signup_lambda_zip.output_path
   source_code_hash = data.archive_file.signup_lambda_zip.output_base64sha256
-  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
+  timeout          = 30
 
   environment {
     variables = {
@@ -159,7 +159,7 @@ resource "aws_lambda_function" "get_upload_url" {
   runtime          = "python3.11"
   filename         = data.archive_file.upload_url_lambda_zip.output_path
   source_code_hash = data.archive_file.upload_url_lambda_zip.output_base64sha256
-  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
+  timeout          = 30
 
   environment {
     variables = {
@@ -204,7 +204,7 @@ resource "aws_lambda_permission" "api_gateway_invoke_signup" {
 
 # Give API Gateway permission to invoke the login Lambda
 resource "aws_lambda_permission" "api_gateway_invoke_login" {
-  statement_id  = "AllowAPIGatewayInvokeLogin"
+  statement_id  = "AllowAPIGateayInvokeLogin"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.login.function_name
   principal     = "apigateway.amazonaws.com"
@@ -217,7 +217,8 @@ resource "aws_lambda_permission" "api_gateway_invoke_get_upload_url" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_upload_url.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_i_gateway_rest_api.api.execution_arn}/*/*/*"
+  # <--- FIX: Corrected typo aws_i_gateway... to aws_api_gateway...
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # --- API Gateway Wiring: /signup [NEW] ---
@@ -284,5 +285,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
 resource "aws_api_gateway_stage" "api_stage" {
   deployment_id = aws_api_gateway_deployment.api_deployment.id
-  rest_api_id   = aws_i_gateway_rest_api.api.id
-  stage_name    = var.environment
+  # <--- FIX: Corrected typo aws_i_gateway... to aws_api_gateway...
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  stage_name    = var.environment_name # Stage name will be 'dev', 'prod', etc.
+}
