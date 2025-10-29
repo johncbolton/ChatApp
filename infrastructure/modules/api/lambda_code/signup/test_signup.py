@@ -4,6 +4,9 @@ from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 import os # Import os to use for @patch.dict
 
+# Import lambda_handler at the top
+from signup import lambda_handler
+
 mock_os_environ = {
     'COGNITO_USER_POOL_ID': 'test_pool_id',
     'COGNITO_CLIENT_ID': 'test_client_id',
@@ -14,14 +17,19 @@ mock_os_environ = {
 mock_boto3_client = MagicMock()
 mock_boto3_resource = MagicMock()
 
-with patch.dict(os.environ, mock_os_environ):
-    with patch('boto3.client', return_value=mock_boto3_client):
-        with patch('boto3.resource', return_value=mock_boto3_resource):
-            from signup import lambda_handler
-
 class TestSignupLambda(unittest.TestCase):
 
     def setUp(self):
+        # Set up patchers
+        self.patchers = [
+            patch.dict(os.environ, mock_os_environ, clear=True),
+            patch('boto3.client', return_value=mock_boto3_client),
+            patch('boto3.resource', return_value=mock_boto3_resource)
+        ]
+        # Start patchers
+        for p in self.patchers:
+            p.start()
+
         # This mocks the cognito client
         self.cognito_client = mock_boto3_client
         
@@ -34,6 +42,10 @@ class TestSignupLambda(unittest.TestCase):
         self.cognito_client.reset_mock()
         self.dynamodb_resource.reset_mock()
         self.mock_table.reset_mock()
+
+    def tearDown(self):
+        for p in self.patchers:
+            p.stop()
 
     def test_successful_signup(self):
         self.cognito_client.sign_up.return_value = {
@@ -162,8 +174,12 @@ class TestSignupLambda(unittest.TestCase):
             'username': 'testuser'
         }
         event = {'body': json.dumps(event_body)}
+
+        # This is a mock context object
+        mock_context = MagicMock()
+        mock_context.aws_request_id = 'test-request-id'
         
-        response = lambda_handler(event, {})
+        response = lambda_handler(event, mock_context)
         
         self.assertEqual(response['statusCode'], 500)
         body = json.loads(response['body'])
