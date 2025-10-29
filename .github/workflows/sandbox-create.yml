@@ -50,7 +50,7 @@ jobs:
             -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
             -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
-        working-directory: infra/sandbox
+        working-directory: infrastructure/sandbox
 
       - name: 'Terraform Apply (Deploy)'
         id: apply
@@ -59,7 +59,7 @@ jobs:
             -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="project_name=${{ env.PROJECT_NAME }}"
-        working-directory: infra/sandbox
+        working-directory: infrastructure/sandbox
 
       - name: 'Get API URL Output'
         id: get_output
@@ -101,7 +101,7 @@ jobs:
             -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
             -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
-        working-directory: infra/sandbox
+        working-directory: infrastructure/sandbox
 
       - name: 'Terraform Destroy'
         run: |
@@ -109,4 +109,4 @@ jobs:
             -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="project_name=${{ env.PROJECT_NAME }}"
-        working-directory: infra/sandbox
+        working-directory: infrastructure/sandbox
