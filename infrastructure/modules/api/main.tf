@@ -136,9 +136,10 @@ resource "aws_lambda_function" "signup" {
 
   environment {
     variables = {
-      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-      COGNITO_CLIENT_ID    = var.cognito_client_id
-      USER_PROFILE_TABLE   = var.user_profile_table_name
+      COGNITO_USER_POOL_ID    = var.cognito_user_pool_id
+      COGNITO_CLIENT_ID       = var.cognito_client_id
+      # <--- FIX: Renamed this key to match your Python code (added "_NAME")
+      USER_PROFILE_TABLE_NAME = var.user_profile_table_name
     }
   }
 }
@@ -160,7 +161,7 @@ resource "aws_lambda_function" "get_upload_url" {
 
   environment {
     variables = {
-      MEDIA_BUCKET_NAME        = var.media_bucket_name
+      MEDIA_BUCKET_NAME         = var.media_bucket_name
       MEDIA_METADATA_TABLE_NAME = var.media_metadata_table_name
     }
   }
@@ -190,12 +191,13 @@ resource "aws_api_gateway_integration" "login" {
   uri                     = aws_lambda_function.login.invoke_arn
 }
 
+# Give API Gateway permission to invoke the signup Lambda
 resource "aws_lambda_permission" "api_gateway_invoke_signup" {
   statement_id  = "AllowAPIGatewayInvokeSignup"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.signup.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # Give API Gateway permission to invoke the login Lambda
@@ -204,7 +206,17 @@ resource "aws_lambda_permission" "api_gateway_invoke_login" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.login.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+}
+
+# <--- FIX: Added missing permission for the get-upload-url Lambda
+# Give API Gateway permission to invoke the get_upload_url Lambda
+resource "aws_lambda_permission" "api_gateway_invoke_get_upload_url" {
+  statement_id  = "AllowAPIGatewayInvokeGetUploadUrl"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_upload_url.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # --- API Gateway Wiring: /signup [NEW] ---
@@ -260,13 +272,11 @@ resource "aws_api_gateway_integration" "get_upload_url" {
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
+  # <--- FIX: Changed this trigger to timestamp()
+  # This forces a new deployment every time you run 'terraform apply',
+  # which prevents 404 errors from stale deployments.
   triggers = {
-    # We add the new signup integration to the trigger
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_integration.login.id,
-      aws_api_gateway_integration.get_upload_url.id,
-      aws_api_gateway_integration.signup.id
-    ]))
+    redeployment = timestamp()
   }
 
   lifecycle {
