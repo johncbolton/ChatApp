@@ -48,16 +48,16 @@
                     "mode": "raw",
                     "raw": "{\n    \"username\": \"{{$randomUserName}}\",\n    \"password\": \"{{$randomPassword}}\",\n    \"email\": \"{{$randomEmail}}\"\n}"
                 },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-}},
+                "url": {
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
+                    "host": [
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
+                    ],
+                    "path": [
+                        "sandbox",
+                        "register"
+                    ]
+                },
                 "description": "Creates a new user with dynamic, random credentials."
             },
             "response": []
@@ -101,16 +101,16 @@
                     "mode": "raw",
                     "raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
                 },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-}},
+                "url": {
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
+                    "host": [
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
+                    ],
+                    "path": [
+                        "sandbox",
+                        "register"
+                    ]
+                },
                 "description": "Logs in with the credentials from the first step."
             },
             "response": []
@@ -157,16 +157,16 @@
                         }
                     ]
                 },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-},
+                "url": {
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
+                    "host": [
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
+                    ],
+                    "path": [
+                        "sandbox",
+                        "register"
+                    ]
+                },
                 "description": "Uses the saved token and user ID to fetch user data."
             },
             "response": []
