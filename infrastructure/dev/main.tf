@@ -52,8 +52,9 @@ module "api" {
   user_profile_table_arn = module.identity.user_profile_table_arn
 
   # --- Connections from Media Storage Module ---
-  media_bucket_name        = module.media_storage.media_bucket_name
-  media_bucket_arn         = module.media_storage.media_bucket_arn # <-- This was missing
-  media_metadata_table_arn = module.media_storage.media_metadata_table_arn
+  media_bucket_name         = module.media_storage.media_bucket_name
+  media_bucket_arn          = module.media_storage.media_bucket_arn
+  media_metadata_table_name = module.media_storage.media_metadata_table_name
+  media_metadata_table_arn  = module.media_storage.media_metadata_table_arn
 }
 
