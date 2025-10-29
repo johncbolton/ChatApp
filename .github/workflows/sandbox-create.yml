@@ -65,7 +65,7 @@ jobs:
         id: get_output
         run: |
           echo "api_url=$(terraform output -raw api_invoke_url)" >> $GITHUB_OUTPUT
-        working-directory: infra/sandbox
+        working-directory: infrastructure/sandbox
 
       - name: 'Comment on PR with API URL'
         uses: actions/github-script@v7
