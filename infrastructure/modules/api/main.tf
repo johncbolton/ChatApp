@@ -190,6 +190,23 @@ resource "aws_api_gateway_integration" "login" {
   uri                     = aws_lambda_function.login.invoke_arn
 }
 
+resource "aws_lambda_permission" "api_gateway_invoke_signup" {
+  statement_id  = "AllowAPIGatewayInvokeSignup"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.signup.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+}
+
+# Give API Gateway permission to invoke the login Lambda
+resource "aws_lambda_permission" "api_gateway_invoke_login" {
+  statement_id  = "AllowAPIGatewayInvokeLogin"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.login.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+}
+
 # --- API Gateway Wiring: /signup [NEW] ---
 resource "aws_api_gateway_resource" "signup" {
   rest_api_id = aws_api_gateway_rest_api.api.id
