@@ -107,7 +107,11 @@ def lambda_handler(event, context):
                 'statusCode': 400,
                 'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
             }
-        raise
+        print(f"Unhandled ClientError in signup: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'message': f"An unexpected error occurred: {e.response['Error']['Code']}"})
+        }
     except Exception as e:
         # This is now a general catch-all for other unexpected errors
         return {
