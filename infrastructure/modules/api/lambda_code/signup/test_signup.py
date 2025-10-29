@@ -2,34 +2,45 @@ import json
 import unittest
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
+import os # Import os to use for @patch.dict
 
 mock_os_environ = {
     'COGNITO_USER_POOL_ID': 'test_pool_id',
     'COGNITO_CLIENT_ID': 'test_client_id',
-    'USER_PROFILE_TABLE': 'test_profile_table'
+    'USER_PROFILE_TABLE_NAME': 'test_profile_table',
+    'AWS_REGION': 'us-east-1' # Add region to prevent NoRegionError
 }
 
-mock_boto3 = MagicMock()
+mock_boto3_client = MagicMock()
+mock_boto3_resource = MagicMock()
 
-with patch.dict('os.environ', mock_os_environ):
-    with patch('boto3.client', return_value=mock_boto3):
-        from signup import lambda_handler
+with patch.dict(os.environ, mock_os_environ):
+    with patch('boto3.client', return_value=mock_boto3_client):
+        with patch('boto3.resource', return_value=mock_boto3_resource):
+            from signup import lambda_handler
 
 class TestSignupLambda(unittest.TestCase):
 
     def setUp(self):
-        self.cognito_client = mock_boto3
-        self.dynamodb_client = mock_boto3
+        # This mocks the cognito client
+        self.cognito_client = mock_boto3_client
         
+        # This mocks the dynamodb resource, table, and put_item call
+        self.dynamodb_resource = mock_boto3_resource
+        self.mock_table = MagicMock()
+        self.dynamodb_resource.Table.return_value = self.mock_table
+        
+        # Reset mocks before each test
         self.cognito_client.reset_mock()
-        self.dynamodb_client.reset_mock()
+        self.dynamodb_resource.reset_mock()
+        self.mock_table.reset_mock()
 
     def test_successful_signup(self):
         self.cognito_client.sign_up.return_value = {
             'UserSub': 'new-user-uuid-12345'
         }
         
-        self.dynamodb_client.put_item.return_value = {}
+        self.mock_table.put_item.return_value = {}
 
         event_body = {
             'email': 'test@example.com',
@@ -39,33 +50,42 @@ class TestSignupLambda(unittest.TestCase):
         
         event = {'body': json.dumps(event_body)}
         
-        response = lambda_handler(event, {})
+        # This is a mock context object
+        mock_context = MagicMock()
+        mock_context.aws_request_id = 'test-request-id'
+        
+        response = lambda_handler(event, mock_context)
         
         self.assertEqual(response['statusCode'], 201)
         body = json.loads(response['body'])
-        self.assertEqual(body['message'], 'User created successfully. Please check your email to verify your account.')
-        self.assertEqual(body['userId'], 'new-user-uuid-12345')
+        # Updated message to match the one in the new signup.py
+        self.assertEqual(body['message'], 'User created successfully. Please check your email to confirm.')
+        self.assertEqual(body['userSub'], 'new-user-uuid-12345') # Updated key
 
+        # Assert cognito was called correctly
         self.cognito_client.sign_up.assert_called_once_with(
             ClientId='test_client_id',
-            Username='test@example.com',
+            Username='testuser', # Updated to match signup.py
             Password='Password123!',
             UserAttributes=[
-                {'Name': 'email', 'Value': 'test@example.com'},
-                {'Name': 'preferred_username', 'Value': 'testuser'}
+                {'Name': 'email', 'Value': 'test@example.com'}
             ]
         )
 
-        self.dynamodb_client.put_item.assert_called_once()
-        put_item_call_args = self.dynamodb_client.put_item.call_args[1]
-        self.assertEqual(put_item_call_args['TableName'], 'test_profile_table')
-        self.assertEqual(put_item_call_args['Item']['userId']['S'], 'new-user-uuid-12345')
-        self.assertEqual(put_item_call_args['Item']['username']['S'], 'testuser')
+        # Assert DynamoDB Table resource was called
+        self.dynamodb_resource.Table.assert_called_once_with('test_profile_table')
+        
+        # Assert put_item was called on the table object
+        self.mock_table.put_item.assert_called_once()
+        put_item_call_args = self.mock_table.put_item.call_args[1]
+        self.assertEqual(put_item_call_args['Item']['userID'], 'new-user-uuid-12345')
+        self.assertEqual(put_item_call_args['Item']['username'], 'testuser')
 
     def test_missing_parameters(self):
         event_body = {
             'email': 'test@example.com',
             'password': 'Password123!'
+            # 'username' is missing
         }
         
         event = {'body': json.dumps(event_body)}
@@ -73,7 +93,8 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertEqual(body['error'], 'Email, password, and username are required.')
+        # Updated message to match signup.py
+        self.assertEqual(body['message'], 'Username, email, and password are required.')
 
     def test_username_exists(self):
         error_response = {
@@ -95,20 +116,13 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 409)
         body = json.loads(response['body'])
-        self.assertEqual(body['error'], 'An account with this email already exists.')
+        self.assertEqual(body['message'], 'This username already exists.')
 
     def test_invalid_password(self):
-        error_response = {
-            'Error': {
-                'Code': 'InvalidPasswordException',
-                'Message': 'Password did not conform with policy'
-            }
-        }
-        self.cognito_client.sign_up.side_effect = ClientError(error_response, 'sign_up')
-
+        # Test the internal password logic
         event_body = {
             'email': 'test@example.com',
-            'password': 'weak',
+            'password': 'weak', # Less than 8 chars
             'username': 'testuser'
         }
         event = {'body': json.dumps(event_body)}
@@ -117,7 +131,7 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Invalid password', body['error'])
+        self.assertEqual(body['message'], 'Password must be at least 8 characters.')
 
     def test_invalid_json_body(self):
         event = {'body': 'this is not json'}
@@ -126,7 +140,7 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertEqual(body['error'], 'Invalid JSON in request body.')
+        self.assertEqual(body['message'], 'Invalid JSON format in request body.')
 
     def test_dynamodb_put_fails(self):
         self.cognito_client.sign_up.return_value = {
@@ -139,7 +153,8 @@ class TestSignupLambda(unittest.TestCase):
                 'Message': 'Rate limit exceeded'
             }
         }
-        self.dynamodb_client.put_item.side_effect = ClientError(error_response, 'put_item')
+        # Make the mock table's put_item fail
+        self.mock_table.put_item.side_effect = ClientError(error_response, 'put_item')
         
         event_body = {
             'email': 'test@example.com',
@@ -152,6 +167,7 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 500)
         body = json.loads(response['body'])
+        # This now matches the error key from the updated signup.py
         self.assertEqual(body['error'], 'User created in Cognito, but failed to create user profile.')
 
 if __name__ == '__main__':
