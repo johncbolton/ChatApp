@@ -110,6 +110,7 @@ resource "aws_lambda_function" "login" {
   runtime          = "python3.11"
   filename         = data.archive_file.login_lambda_zip.output_path
   source_code_hash = data.archive_file.login_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
@@ -133,12 +134,12 @@ resource "aws_lambda_function" "signup" {
   runtime          = "python3.11"
   filename         = data.archive_file.signup_lambda_zip.output_path
   source_code_hash = data.archive_file.signup_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
       COGNITO_USER_POOL_ID    = var.cognito_user_pool_id
       COGNITO_CLIENT_ID       = var.cognito_client_id
-      # <--- FIX: Renamed this key to match your Python code (added "_NAME")
       USER_PROFILE_TABLE_NAME = var.user_profile_table_name
     }
   }
@@ -158,6 +159,7 @@ resource "aws_lambda_function" "get_upload_url" {
   runtime          = "python3.11"
   filename         = data.archive_file.upload_url_lambda_zip.output_path
   source_code_hash = data.archive_file.upload_url_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
@@ -209,14 +211,13 @@ resource "aws_lambda_permission" "api_gateway_invoke_login" {
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
-# <--- FIX: Added missing permission for the get-upload-url Lambda
 # Give API Gateway permission to invoke the get_upload_url Lambda
 resource "aws_lambda_permission" "api_gateway_invoke_get_upload_url" {
   statement_id  = "AllowAPIGatewayInvokeGetUploadUrl"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_upload_url.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+  source_arn    = "${aws_i_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # --- API Gateway Wiring: /signup [NEW] ---
@@ -272,9 +273,6 @@ resource "aws_api_gateway_integration" "get_upload_url" {
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
-  # <--- FIX: Changed this trigger to timestamp()
-  # This forces a new deployment every time you run 'terraform apply',
-  # which prevents 404 errors from stale deployments.
   triggers = {
     redeployment = timestamp()
   }
@@ -286,6 +284,5 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
 resource "aws_api_gateway_stage" "api_stage" {
   deployment_id = aws_api_gateway_deployment.api_deployment.id
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  stage_name    = var.environment_name # Stage name will be 'dev', 'prod', etc.
-}
+  rest_api_id   = aws_i_gateway_rest_api.api.id
+  stage_name    = var.environment
