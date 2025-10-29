@@ -1,21 +1,31 @@
-# Amazon Cognito User Pool
 resource "aws_cognito_user_pool" "user_pool" {
-  # Use the project and environment name to create a unique pool name
   name = "${var.project_name}-${var.environment_name}-user-pool"
+
+  username_attributes = ["email"]
 
   schema {
     name                = "email"
     attribute_data_type = "String"
     mutable             = false
     required            = true
+
+    # --- ADDED ---
+    # This is required by Terraform when defining a string attribute
+    # to avoid plan diffs.
+    string_attribute_constraints {
+      min_length = 1
+      max_length = 2048
+    }
   }
 
+  # --- CHANGE ---
+  # Weakened password policy to be as permissive as possible
   password_policy {
-    minimum_length    = 8
-    require_lowercase = true
-    require_numbers   = true
-    require_symbols   = true
-    require_uppercase = true
+    minimum_length    = 6 # This is the minimum value Cognito will accept
+    require_lowercase = false
+    require_numbers   = false
+    require_symbols   = false
+    require_uppercase = false
   }
 
   auto_verified_attributes = ["email"]
