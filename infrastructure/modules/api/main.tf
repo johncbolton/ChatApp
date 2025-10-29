@@ -217,8 +217,7 @@ resource "aws_lambda_permission" "api_gateway_invoke_get_upload_url" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_upload_url.function_name
   principal     = "apigateway.amazonaws.com"
-  # <--- FIX: Corrected typo aws_i_gateway... to aws_api_gateway...
-  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+  source_arn    = "${aws_i_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # --- API Gateway Wiring: /signup [NEW] ---
@@ -285,7 +284,5 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
 resource "aws_api_gateway_stage" "api_stage" {
   deployment_id = aws_api_gateway_deployment.api_deployment.id
-  # <--- FIX: Corrected typo aws_i_gateway... to aws_api_gateway...
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  stage_name    = var.environment_name # Stage name will be 'dev', 'prod', etc.
-}
+  rest_api_id   = aws_i_gateway_rest_api.api.id
+  stage_name    = var.environment
