@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 import os # Import os to use for @patch.dict
+from datetime import datetime
 
 # Import lambda_handler at the top
 from signup import lambda_handler
@@ -92,6 +93,15 @@ class TestSignupLambda(unittest.TestCase):
         put_item_call_args = self.mock_table.put_item.call_args[1]
         self.assertEqual(put_item_call_args['Item']['userID'], 'new-user-uuid-12345')
         self.assertEqual(put_item_call_args['Item']['username'], 'testuser')
+
+        # Verify the timestamp
+        self.assertIn('createdAt', put_item_call_args['Item'])
+        created_at_str = put_item_call_args['Item']['createdAt']
+        self.assertTrue(isinstance(created_at_str, str))
+        try:
+            datetime.fromisoformat(created_at_str)
+        except ValueError:
+            self.fail("createdAt is not a valid ISO 8601 timestamp")
 
     def test_missing_parameters(self):
         event_body = {
