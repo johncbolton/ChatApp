@@ -1,105 +1,96 @@
-import json
 import boto3
 import os
-import uuid
-import time
-from botocore.exceptions import ClientError
+import json
+import re
 
-cognito_client = boto3.client('cognito-idp')
-dynamodb_client = boto3.client('dynamodb')
-
-USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
-USER_POOL_CLIENT_ID = os.environ['COGNITO_CLIENT_ID']
-USER_PROFILE_TABLE = os.environ['USER_PROFILE_TABLE_NAME']
+dynamodb = boto3.resource('dynamodb')
+cognito = boto3.client('cognito-idp')
 
 def lambda_handler(event, context):
+    
+    try:
+        USER_PROFILE_TABLE = os.environ['USER_PROFILE_TABLE_NAME']
+        COGNITO_CLIENT_ID = os.environ['COGNITO_CLIENT_ID']
+        COGNITO_USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
+    except KeyError as e:
+        print(f"ERROR: Missing environment variable: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'message': f'Server configuration error: {e}'})
+        }
+    
     try:
         body = json.loads(event.get('body', '{}'))
-        
-        email = body.get('email')
-        password = body.get('password')
-        username = body.get('username')
-
-        if not all([email, password, username]):
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'Email, password, and username are required.'})
-            }
-
-        # Sign up user in Cognito 
-        try:
-            response = cognito_client.sign_up(
-                ClientId=USER_POOL_CLIENT_ID,
-                Username=email,  
-                Password=password,
-                UserAttributes=[
-                    {
-                        'Name': 'email',
-                        'Value': email
-                    },
-                    {
-                        'Name': 'preferred_username',
-                        'Value': username
-                    }
-                ]
-            )
-            
-            cognito_user_id = response['UserSub']
-            
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'UsernameExistsException':
-                return {
-                    'statusCode': 409,
-                    'body': json.dumps({'error': 'An account with this email already exists.'})
-                }
-            elif e.response['Error']['Code'] == 'InvalidPasswordException':
-                return {
-                    'statusCode': 400,
-                    'body': json.dumps({'error': f"Invalid password: {e.response['Error']['Message']}"})
-                }
-            else:
-                raise e
-
-        # User profile in DynamoDB 
-        user_id = cognito_user_id  
-        timestamp = str(int(time.time()))
-
-        try:
-            dynamodb_client.put_item(
-                TableName=USER_PROFILE_TABLE,
-                Item={
-                    'userId': {'S': user_id},
-                    'username': {'S': username},
-                    'email': {'S': email},
-                    'createdAt': {'N': timestamp},
-                    'friendsList': {'L': []} 
-                },
-                ConditionExpression='attribute_not_exists(userId)'
-            )
-        except ClientError as e:
-            print(f"Error creating DynamoDB profile: {e}")
-            return {
-                'statusCode': 500,
-                'body': json.dumps({'error': 'User created in Cognito, but failed to create user profile.'})
-            }
-        
-        # Success
-        return {
-            'statusCode': 201,
-            'body': json.dumps({
-                'message': 'User created successfully. Please check your email to verify your account.',
-                'userId': user_id
-            })
-        }
-
     except json.JSONDecodeError:
         return {
             'statusCode': 400,
-            'body': json.dumps({'error': 'Invalid JSON in request body.'})
+            'body': json.dumps({'message': 'Invalid JSON format in request body.'})
+        }
+
+    username = body.get('username')
+    email = body.get('email')
+    password = body.get('password')
+
+    if not all([username, email, password]):
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'message': 'Username, email, and password are required.'})
+        }
+
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'message': 'Invalid email format.'})
+        }
+    
+    if len(password) < 8:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'message': 'Password must be at least 8 characters.'})
+        }
+
+    try:
+        response = cognito.sign_up(
+            ClientId=COGNITO_CLIENT_ID,
+            Username=username,
+            Password=password,
+            UserAttributes=[
+                {'Name': 'email', 'Value': email}
+            ]
+        )
+        
+        user_sub = response['UserSub']
+
+        table = dynamodb.Table(USER_PROFILE_TABLE)
+        table.put_item(
+            Item={
+                'userID': user_sub,
+                'username': username,
+                'email': email,
+                'createdAt': json.dumps(context.aws_request_id)
+            }
+        )
+
+        return {
+            'statusCode': 201,
+            'body': json.dumps({
+                'message': 'User created successfully. Please check your email to confirm.',
+                'userSub': user_sub
+            })
+        }
+
+    except cognito.exceptions.UsernameExistsException:
+        return {
+            'statusCode': 409,
+            'body': json.dumps({'message': 'This username already exists.'})
+        }
+    except cognito.exceptions.InvalidParameterException as e:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
         }
     except Exception as e:
-        print(f"Internal server error: {e}")
         return {
             'statusCode': 500,
-            'body': json.dumps({'error': f'Internal server error: {str(e)}'})
+            'body': json.dumps({'message': f'An internal server error occurred: {str(e)}'})
         }
