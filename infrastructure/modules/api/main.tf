@@ -160,7 +160,8 @@ resource "aws_lambda_function" "get_upload_url" {
 
   environment {
     variables = {
-      MEDIA_BUCKET_NAME = var.media_bucket_name
+      MEDIA_BUCKET_NAME        = var.media_bucket_name
+      MEDIA_METADATA_TABLE_NAME = var.media_metadata_table_name
     }
   }
 }
