@@ -106,7 +106,11 @@ def lambda_handler(event, context):
                 'statusCode': 400,
                 'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
             }
-        raise
+        print(f"Unhandled Cognito ClientError: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'message': 'An internal server error occurred during user signup.'})
+        }
     except Exception as e:
         # This is now a general catch-all for other unexpected errors
         return {

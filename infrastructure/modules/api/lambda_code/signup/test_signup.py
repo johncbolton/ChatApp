@@ -43,6 +43,12 @@ class TestSignupLambda(unittest.TestCase):
         self.dynamodb_resource.reset_mock()
         self.mock_table.reset_mock()
 
+        # Explicitly reset side_effect and return_value for mocks
+        self.cognito_client.sign_up.side_effect = None
+        self.cognito_client.sign_up.return_value = None
+        self.mock_table.put_item.side_effect = None
+        self.mock_table.put_item.return_value = None
+
     def tearDown(self):
         for p in self.patchers:
             p.stop()
@@ -185,6 +191,28 @@ class TestSignupLambda(unittest.TestCase):
         body = json.loads(response['body'])
         # This now matches the error key from the updated signup.py
         self.assertEqual(body['error'], 'User created in Cognito, but failed to create user profile.')
+
+    def test_cognito_generic_client_error(self):
+        error_response = {
+            'Error': {
+                'Code': 'SomeOtherException',
+                'Message': 'An unexpected error occurred.'
+            }
+        }
+        self.cognito_client.sign_up.side_effect = ClientError(error_response, 'sign_up')
+
+        event_body = {
+            'email': 'test@example.com',
+            'password': 'Password123!',
+            'username': 'testuser'
+        }
+        event = {'body': json.dumps(event_body)}
+
+        response = lambda_handler(event, {})
+
+        self.assertEqual(response['statusCode'], 500)
+        body = json.loads(response['body'])
+        self.assertEqual(body['message'], 'An internal server error occurred during user signup.')
 
 if __name__ == '__main__':
     unittest.main()
