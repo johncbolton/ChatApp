@@ -75,7 +75,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: `${{ steps.get_output.outputs.api_url }}`\n\nThis sandbox will be automatically destroyed in 15 minutes.`
+              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 15 minutes.`
             })
 
       - name: 'Wait 15 Minutes'
