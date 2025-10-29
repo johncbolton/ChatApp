@@ -21,9 +21,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# The variable blocks were removed from this file.
-# They should exist in your "dev/variables.tf" file.
-
 module "identity" {
   source = "../modules/identity"
 
@@ -34,8 +31,8 @@ module "identity" {
 module "media_storage" {
   source = "../modules/media-storage"
 
-  project_name           = var.project_name
-  environment_name       = "dev"
+  project_name         = var.project_name
+  environment_name     = "dev"
   allowed_cors_origins = var.media_allowed_cors_origins
 }
 
@@ -45,13 +42,18 @@ module "api" {
 
   project_name     = var.project_name
   environment_name = "dev"
+  aws_region       = var.aws_region # Pass the region to the API module
 
-  cognito_user_pool_id     = module.identity.cognito_user_pool_id
-  cognito_client_id        = module.identity.cognito_client_id
-  cognito_user_pool_arn    = module.identity.cognito_user_pool_arn
+  # --- Connections from Identity Module ---
+  cognito_user_pool_id     = module.identity.user_pool_id
+  cognito_client_id        = module.identity.user_pool_client_id
+  cognito_user_pool_arn    = module.identity.user_pool_arn
+  user_profile_table_name = module.identity.user_profile_table_name # <-- This was missing
   user_profile_table_arn = module.identity.user_profile_table_arn
 
+  # --- Connections from Media Storage Module ---
   media_bucket_name        = module.media_storage.media_bucket_name
+  media_bucket_arn         = module.media_storage.media_bucket_arn # <-- This was missing
   media_metadata_table_arn = module.media_storage.media_metadata_table_arn
-  aws_region                 = var.aws_region
 }
+

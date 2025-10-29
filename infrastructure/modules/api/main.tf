@@ -1,7 +1,6 @@
 # Module for the API & Compute Layer
 
-# IAM RoleLambda 
-
+# --- IAM Role & Base Policy ---
 resource "aws_iam_role" "lambda_exec_role" {
   name = "${var.project_name}-lambda-exec-role-${var.environment_name}"
 
@@ -27,7 +26,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# IAM Policy
+# --- Custom IAM Policy for App Permissions ---
 resource "aws_iam_policy" "lambda_app_permissions" {
   name        = "${var.project_name}-lambda-permissions-${var.environment_name}"
   description = "Permissions for the chatapp Lambda functions"
@@ -36,25 +35,39 @@ resource "aws_iam_policy" "lambda_app_permissions" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Permissions for Login (cognito:InitiateAuth) and Signup (cognito:SignUp)
         Effect = "Allow"
         Action = [
           "cognito-idp:InitiateAuth",
-          "cognito-idp:AdminInitiateAuth"
+          "cognito-idp:AdminInitiateAuth",
+          "cognito-idp:SignUp"
         ]
         Resource = [
           var.cognito_user_pool_arn
         ]
       },
       {
+        # Permission for get-upload-url (s3:PutObject)
         Effect = "Allow"
         Action = [
           "s3:PutObject"
         ]
         Resource = [
-          "arn:aws:s3:::${var.media_bucket_name}/*"
+          "${var.media_bucket_arn}/*"
         ]
       },
       {
+        # Permission for Signup to write to the user profile table
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem"
+        ]
+        Resource = [
+          var.user_profile_table_arn
+        ]
+      },
+      {
+        # Read-only permissions for other functions (e.g., login, get-media)
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -75,17 +88,15 @@ resource "aws_iam_role_policy_attachment" "lambda_app_permissions" {
 }
 
 
-# REST API
+# --- API Gateway REST API ---
 resource "aws_api_gateway_rest_api" "api" {
   name        = "${var.project_name}-api-${var.environment_name}"
   description = "API for the ${var.project_name} application"
 
-  # Define a simple binary media type for image uploads
   binary_media_types = ["image/jpeg", "image/png", "video/mp4"]
 }
 
-# Lambda login
-
+# --- Lambda: login ---
 data "archive_file" "login_lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_code/login"
@@ -95,7 +106,7 @@ data "archive_file" "login_lambda_zip" {
 resource "aws_lambda_function" "login" {
   function_name    = "${var.project_name}-login-${var.environment_name}"
   role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "login.lambda_handler" # File is 'login.py', function is 'lambda_handler'
+  handler          = "login.lambda_handler"
   runtime          = "python3.11"
   filename         = data.archive_file.login_lambda_zip.output_path
   source_code_hash = data.archive_file.login_lambda_zip.output_base64sha256
@@ -108,8 +119,31 @@ resource "aws_lambda_function" "login" {
   }
 }
 
-# Lambda get-upload-url
+# --- Lambda: signup [NEW] ---
+data "archive_file" "signup_lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_code/signup"
+  output_path = "${path.module}/lambda_code/signup.zip"
+}
 
+resource "aws_lambda_function" "signup" {
+  function_name    = "${var.project_name}-signup-${var.environment_name}"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "signup.lambda_handler"
+  runtime          = "python3.11"
+  filename         = data.archive_file.signup_lambda_zip.output_path
+  source_code_hash = data.archive_file.signup_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      COGNITO_CLIENT_ID    = var.cognito_client_id
+      USER_PROFILE_TABLE   = var.user_profile_table_name
+    }
+  }
+}
+
+# --- Lambda: get-upload-url ---
 data "archive_file" "upload_url_lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_code/upload_url"
@@ -119,7 +153,7 @@ data "archive_file" "upload_url_lambda_zip" {
 resource "aws_lambda_function" "get_upload_url" {
   function_name    = "${var.project_name}-get-upload-url-${var.environment_name}"
   role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "upload_url.lambda_handler" # File is 'upload_url.py'
+  handler          = "upload_url.lambda_handler"
   runtime          = "python3.11"
   filename         = data.archive_file.upload_url_lambda_zip.output_path
   source_code_hash = data.archive_file.upload_url_lambda_zip.output_base64sha256
@@ -131,8 +165,7 @@ resource "aws_lambda_function" "get_upload_url" {
   }
 }
 
-# Wire API Gateway
-
+# --- API Gateway Wiring: /login ---
 resource "aws_api_gateway_resource" "login" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
@@ -156,6 +189,31 @@ resource "aws_api_gateway_integration" "login" {
   uri                     = aws_lambda_function.login.invoke_arn
 }
 
+# --- API Gateway Wiring: /signup [NEW] ---
+resource "aws_api_gateway_resource" "signup" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "signup"
+}
+
+resource "aws_api_gateway_method" "signup" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.signup.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "signup" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.signup.id
+  http_method = aws_api_gateway_method.signup.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.signup.invoke_arn
+}
+
+# --- API Gateway Wiring: /get-upload-url ---
 resource "aws_api_gateway_resource" "get_upload_url" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
@@ -179,14 +237,17 @@ resource "aws_api_gateway_integration" "get_upload_url" {
   uri                     = aws_lambda_function.get_upload_url.invoke_arn
 }
 
-# Deploy the API 
+
+# --- Deploy the API ---
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
   triggers = {
+    # We add the new signup integration to the trigger
     redeployment = sha1(jsonencode([
       aws_api_gateway_integration.login.id,
-      aws_api_gateway_integration.get_upload_url.id
+      aws_api_gateway_integration.get_upload_url.id,
+      aws_api_gateway_integration.signup.id
     ]))
   }
 
