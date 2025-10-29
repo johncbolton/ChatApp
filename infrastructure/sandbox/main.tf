@@ -1,0 +1,52 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
+  }
+  backend "s3" {}
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+module "identity" {
+  source = "../modules/identity"
+
+  project_name     = var.project_name
+  environment_name = var.environment_name # This is the dynamic part
+}
+
+module "media_storage" {
+  source = "../modules/media-storage"
+
+  project_name         = var.project_name
+  environment_name     = var.environment_name # This is the dynamic part
+  allowed_cors_origins = var.media_allowed_cors_origins
+}
+
+module "api" {
+  source = "../modules/api"
+
+
+  project_name     = var.project_name
+  environment_name = var.environment_name 
+  aws_region       = var.aws_region
+
+  cognito_user_pool_id     = module.identity.user_pool_id
+  cognito_client_id        = module.identity.user_pool_client_id
+  cognito_user_pool_arn    = module.identity.user_pool_arn
+  user_profile_table_name  = module.identity.user_profile_table_name
+  user_profile_table_arn = module.identity.user_profile_table_arn
+
+  media_bucket_name        = module.media_storage.media_bucket_name
+  media_bucket_arn         = module.media_storage.media_bucket_arn
+  media_metadata_table_name = module.media_storage.media_metadata_table_name
+  media_metadata_table_arn = module.media_storage.media_metadata_table_arn
+}

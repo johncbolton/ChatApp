@@ -1,0 +1,112 @@
+name: 'Sandbox: Create or Update (15 min auto-destroy)'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy-and-destroy-sandbox:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_DEV }}
+      TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE_SANDBOX }} 
+
+    steps:
+      - name: 'Sanitize Branch Name'
+        id: sanitize
+        run: |
+          BRANCH_NAME=$(echo ${{ github.head_ref }} | tr / - | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g' | cut -c 1-30)
+          echo "sandbox_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "sandbox_key=sandboxes/$BRANCH_NAME/terraform.tfstate" >> $GITHUB_OUTPUT
+
+      - name: 'Checkout Code (with Submodules)'
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_IAM_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 'Setup Terraform'
+        id: setup_tf
+        uses: hashicorp/setup-terraform@v3
+
+      - name: 'Terraform Init (Deploy)'
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
+            -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infra/sandbox
+
+      - name: 'Terraform Apply (Deploy)'
+        id: apply
+        run: |
+          terraform apply -auto-approve \
+            -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=${{ env.PROJECT_NAME }}"
+        working-directory: infra/sandbox
+
+      - name: 'Get API URL Output'
+        id: get_output
+        run: |
+          echo "api_url=$(terraform output -raw api_invoke_url)" >> $GITHUB_OUTPUT
+        working-directory: infra/sandbox
+
+      - name: 'Comment on PR with API URL'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: `${{ steps.get_output.outputs.api_url }}`\n\nThis sandbox will be automatically destroyed in 15 minutes.`
+            })
+
+      - name: 'Wait 15 Minutes'
+        run: sleep 900 
+
+      - name: 'Comment on PR (Destroying)'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `⏰ 15 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
+            })
+            
+      # --- NEW: Auto-Destroy Steps ---
+      - name: 'Terraform Init (Destroy)'
+        run: |
+          # Re-initialize for destroy, just in case
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
+            -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infra/sandbox
+
+      - name: 'Terraform Destroy'
+        run: |
+          terraform destroy -auto-approve \
+            -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=${{ env.PROJECT_NAME }}"
+        working-directory: infra/sandbox
