@@ -1,4 +1,4 @@
-name: 'Sandbox: Create or Update (15 min auto-destroy)'
+name: 'Sandbox: Create or Update (5 min auto-destroy)'
 
 on:
   pull_request:
@@ -75,13 +75,46 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 15 minutes.`
+              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 5 minutes.`
             })
 
-      - name: 'Wait 15 Minutes'
-        run: sleep 900 
+      - name: 'Wait for API Gateway to be ready'
+        run: sleep 15 # Wait 15 seconds for API to stabilize before testing
+        shell: bash
 
-      - name: 'Comment on PR (Destroying)'
+      # --- NEW STEPS FOR NEWMAN API TESTING ---
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Use a stable LTS version
+
+      - name: 'Install Newman'
+        run: npm install -g newman
+
+      - name: 'Run Newman API Tests'
+        id: newman_tests # Give the step an ID to check its outcome
+        continue-on-error: true # This is critical: allows job to continue if tests fail
+        run: |
+          # Run tests using the collection file and dynamically inject the API URL from the terraform output
+          newman run postman/ChatApp.postman_collection.json \
+            --env-var "baseUrl=${{ steps.get_output.outputs.api_url }}" \
+            --reporters cli,junit \
+            --reporter-junit-export test-results/newman-results.xml
+
+      - name: 'Upload Test Results'
+        if: always() # 'always()' ensures this runs even if 'Run Newman API Tests' fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: test-results/newman-results.xml
+      # --- END OF NEW STEPS ---
+
+      - name: 'Wait 5 Minutes (if tests passed)'
+        if: steps.newman_tests.outcome == 'success' # Only wait if tests were successful
+        run: sleep 300 # 300 seconds = 5 minutes
+
+      - name: 'Comment on PR (Destroying after wait)'
+        if: steps.newman_tests.outcome == 'success' # Only run this comment if tests passed
         uses: actions/github-script@v7
         with:
           script: |
@@ -89,13 +122,25 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `⏰ 15 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
+              body: `⏰ 5 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
             })
             
-      # --- NEW: Auto-Destroy Steps ---
+      - name: 'Comment on PR (Destroying on failure)'
+        if: steps.newman_tests.outcome == 'failure' # Only run this comment if tests failed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `❌ API tests failed. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}** immediately.`
+            })
+            
       - name: 'Terraform Init (Destroy)'
+        if: always() # This ensures it runs even if tests fail
         run: |
-          # Re-initialize for destroy, just in case
+          # Re-initialize for destroy
           terraform init \
             -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
             -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
@@ -104,6 +149,7 @@ jobs:
         working-directory: infrastructure/sandbox
 
       - name: 'Terraform Destroy'
+        if: always() # This ensures it runs even if tests fail
         run: |
           terraform destroy -auto-approve \
             -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
