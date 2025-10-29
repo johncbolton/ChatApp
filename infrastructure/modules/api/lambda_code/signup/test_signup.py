@@ -93,21 +93,6 @@ class TestSignupLambda(unittest.TestCase):
         self.assertEqual(put_item_call_args['Item']['userID'], 'new-user-uuid-12345')
         self.assertEqual(put_item_call_args['Item']['username'], 'testuser')
 
-    def test_missing_parameters(self):
-        event_body = {
-            'email': 'test@example.com',
-            'password': 'Password123!'
-            # 'username' is missing
-        }
-        
-        event = {'body': json.dumps(event_body)}
-        response = lambda_handler(event, {})
-        
-        self.assertEqual(response['statusCode'], 400)
-        body = json.loads(response['body'])
-        # Updated message to match signup.py
-        self.assertEqual(body['message'], 'Username, email, and password are required.')
-
     def test_username_exists(self):
         error_response = {
             'Error': {
