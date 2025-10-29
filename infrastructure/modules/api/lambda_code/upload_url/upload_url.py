@@ -22,7 +22,7 @@ def lambda_handler(event, context):
             "headers": headers,
             "body": json.dumps({"message": "CORS preflight OK"})
         }
-  if not MEDIA_BUCKET_NAME:
+    if not MEDIA_BUCKET_NAME:
         return {
             "statusCode": 500,
             "headers": headers,
@@ -30,7 +30,7 @@ def lambda_handler(event, context):
         }
 
     object_key = f"uploads/{uuid.uuid4()}"
-        try:
+    try:
         # Generate a presigned S3 POST URL
         response = s3_client.generate_presigned_post(
             Bucket=MEDIA_BUCKET_NAME,
