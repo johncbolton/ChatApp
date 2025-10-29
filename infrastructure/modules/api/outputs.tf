@@ -18,9 +18,14 @@ output "get_upload_url_lambda_invoke_arn" {
   value       = aws_lambda_function.get_upload_url.invoke_arn
 }
 
+output "signup_lambda_invoke_arn" {
+  description = "The Invoke ARN of the signup Lambda function."
+  value       = aws_lambda_function.signup.invoke_arn
+}
+
 output "api_invoke_url" {
   description = "The invoke URL for the API Gateway."
-  value       = "https://${aws_api_gateway_rest_api.api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment_name}"
+  value       = "https://://${aws_api_gateway_rest_api.api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment_name}"
 }
 
 output "api_gateway_deployment_id" {

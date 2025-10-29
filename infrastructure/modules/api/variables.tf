@@ -1,45 +1,56 @@
 variable "project_name" {
+  description = "The name of the project"
   type        = string
-  description = "The unique project name (e.g., 'john-chatapp')."
 }
 
 variable "environment_name" {
+  description = "The name of the environment (e.g., dev, prod)"
   type        = string
-  description = "The name of the environment (e.g., 'dev', 'prod')."
-}
-
-# --- Inputs from Identity Module ---
-variable "cognito_user_pool_id" {
-  type        = string
-  description = "The ID of the Cognito User Pool."
-}
-
-variable "cognito_user_pool_arn" {
-  type        = string
-  description = "The ARN of the Cognito User Pool."
-}
-
-variable "cognito_client_id" {
-  type        = string
-  description = "The ID of the Cognito User Pool Client."
-}
-
-variable "user_profile_table_arn" {
-  type        = string
-  description = "The ARN of the user profile DynamoDB table."
-}
-
-variable "media_bucket_name" {
-  type        = string
-  description = "The name of the S3 bucket for media."
-}
-
-variable "media_metadata_table_arn" {
-  type        = string
-  description = "The ARN of the media metadata DynamoDB table."
 }
 
 variable "aws_region" {
+  description = "The AWS region for the API Gateway."
   type        = string
-  description = "The AWS region."
+}
+
+# --- Inputs from 'identity' module ---
+variable "cognito_user_pool_id" {
+  description = "The ID of the Cognito User Pool"
+  type        = string
+}
+
+variable "cognito_client_id" {
+  description = "The ID of the Cognito User Pool Client"
+  type        = string
+}
+
+variable "cognito_user_pool_arn" {
+  description = "The ARN of the Cognito User Pool"
+  type        = string
+}
+
+variable "user_profile_table_name" {
+  description = "The name of the DynamoDB table for user profiles"
+  type        = string
+}
+
+variable "user_profile_table_arn" {
+  description = "The ARN of the DynamoDB table for user profiles"
+  type        = string
+}
+
+# --- Inputs from 'media-storage' module ---
+variable "media_bucket_name" {
+  description = "The name of the S3 bucket for media uploads"
+  type        = string
+}
+
+variable "media_bucket_arn" {
+  description = "The ARN of the S3 bucket for media uploads"
+  type        = string
+}
+
+variable "media_metadata_table_arn" {
+  description = "The ARN of the DynamoDB table for media metadata"
+  type        = string
 }
