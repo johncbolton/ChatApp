@@ -95,16 +95,18 @@ def lambda_handler(event, context):
             })
         }
 
-    except cognito.exceptions.UsernameExistsException:
-        return {
-            'statusCode': 409,
-            'body': json.dumps({'message': 'This username already exists.'})
-        }
-    except cognito.exceptions.InvalidParameterException as e:
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
-        }
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'UsernameExistsException':
+            return {
+                'statusCode': 409,
+                'body': json.dumps({'message': 'This username already exists.'})
+            }
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
+            }
+        raise
     except Exception as e:
         # This is now a general catch-all for other unexpected errors
         return {
