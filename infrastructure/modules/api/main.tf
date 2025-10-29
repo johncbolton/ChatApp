@@ -110,6 +110,7 @@ resource "aws_lambda_function" "login" {
   runtime          = "python3.11"
   filename         = data.archive_file.login_lambda_zip.output_path
   source_code_hash = data.archive_file.login_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
@@ -133,12 +134,13 @@ resource "aws_lambda_function" "signup" {
   runtime          = "python3.11"
   filename         = data.archive_file.signup_lambda_zip.output_path
   source_code_hash = data.archive_file.signup_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
-      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-      COGNITO_CLIENT_ID    = var.cognito_client_id
-      USER_PROFILE_TABLE   = var.user_profile_table_name
+      COGNITO_USER_POOL_ID    = var.cognito_user_pool_id
+      COGNITO_CLIENT_ID       = var.cognito_client_id
+      USER_PROFILE_TABLE_NAME = var.user_profile_table_name
     }
   }
 }
@@ -157,10 +159,12 @@ resource "aws_lambda_function" "get_upload_url" {
   runtime          = "python3.11"
   filename         = data.archive_file.upload_url_lambda_zip.output_path
   source_code_hash = data.archive_file.upload_url_lambda_zip.output_base64sha256
+  timeout          = 30 # <--- FIX: Increased timeout from 3s to 30s
 
   environment {
     variables = {
-      MEDIA_BUCKET_NAME = var.media_bucket_name
+      MEDIA_BUCKET_NAME         = var.media_bucket_name
+      MEDIA_METADATA_TABLE_NAME = var.media_metadata_table_name
     }
   }
 }
@@ -187,6 +191,33 @@ resource "aws_api_gateway_integration" "login" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.login.invoke_arn
+}
+
+# Give API Gateway permission to invoke the signup Lambda
+resource "aws_lambda_permission" "api_gateway_invoke_signup" {
+  statement_id  = "AllowAPIGatewayInvokeSignup"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.signup.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+}
+
+# Give API Gateway permission to invoke the login Lambda
+resource "aws_lambda_permission" "api_gateway_invoke_login" {
+  statement_id  = "AllowAPIGatewayInvokeLogin"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.login.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*/*"
+}
+
+# Give API Gateway permission to invoke the get_upload_url Lambda
+resource "aws_lambda_permission" "api_gateway_invoke_get_upload_url" {
+  statement_id  = "AllowAPIGatewayInvokeGetUploadUrl"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_upload_url.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_i_gateway_rest_api.api.execution_arn}/*/*/*"
 }
 
 # --- API Gateway Wiring: /signup [NEW] ---
@@ -243,12 +274,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
   triggers = {
-    # We add the new signup integration to the trigger
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_integration.login.id,
-      aws_api_gateway_integration.get_upload_url.id,
-      aws_api_gateway_integration.signup.id
-    ]))
+    redeployment = timestamp()
   }
 
   lifecycle {
@@ -258,6 +284,5 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
 resource "aws_api_gateway_stage" "api_stage" {
   deployment_id = aws_api_gateway_deployment.api_deployment.id
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  stage_name    = var.environment_name # Stage name will be 'dev', 'prod', etc.
-}
+  rest_api_id   = aws_i_gateway_rest_api.api.id
+  stage_name    = var.environment
