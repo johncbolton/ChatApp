@@ -3,13 +3,15 @@ output "user_pool_id" {
   value       = aws_cognito_user_pool.user_pool.id
 }
 
-output "cognito_app_client_id" {
-  value = aws_cognito_user_pool_client.app_client.id
-}
-
 output "user_pool_client_id" {
   description = "The ID of the Cognito User Pool Client"
   value       = aws_cognito_user_pool_client.app_client.id
+}
+
+output "user_pool_client_secret" {
+  description = "The secret of the Cognito User Pool Client"
+  value       = aws_cognito_user_pool_client.app_client.client_secret
+  sensitive   = true
 }
 
 output "user_pool_arn" {

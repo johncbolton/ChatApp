@@ -140,6 +140,7 @@ resource "aws_lambda_function" "signup" {
     variables = {
       COGNITO_USER_POOL_ID    = var.cognito_user_pool_id
       COGNITO_CLIENT_ID       = var.cognito_client_id
+      COGNITO_CLIENT_SECRET   = var.cognito_client_secret
       USER_PROFILE_TABLE_NAME = var.user_profile_table_name
     }
   }

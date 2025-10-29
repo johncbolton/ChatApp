@@ -47,6 +47,7 @@ module "api" {
   # --- Connections from Identity Module ---
   cognito_user_pool_id    = module.identity.user_pool_id
   cognito_client_id       = module.identity.user_pool_client_id
+  cognito_client_secret   = module.identity.user_pool_client_secret
   cognito_user_pool_arn   = module.identity.user_pool_arn
   user_profile_table_name = module.identity.user_profile_table_name # <-- This was missing
   user_profile_table_arn  = module.identity.user_profile_table_arn

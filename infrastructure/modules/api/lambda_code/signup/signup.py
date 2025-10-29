@@ -3,8 +3,17 @@ import os
 import json
 import re
 from datetime import datetime
+import hmac
+import hashlib
+import base64
 
 from botocore.exceptions import ClientError
+
+def get_secret_hash(username, client_id, client_secret):
+    """Calculates the secret hash for a given user."""
+    message = bytes(username + client_id, 'utf-8')
+    key = bytes(client_secret, 'utf-8')
+    return base64.b64encode(hmac.new(key, message, digestmod=hashlib.sha256).digest()).decode()
 
 def lambda_handler(event, context):
     
@@ -17,6 +26,7 @@ def lambda_handler(event, context):
         USER_PROFILE_TABLE = os.environ['USER_PROFILE_TABLE_NAME']
         COGNITO_CLIENT_ID = os.environ['COGNITO_CLIENT_ID']
         COGNITO_USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
+        COGNITO_CLIENT_SECRET = os.environ['COGNITO_CLIENT_SECRET']
     except KeyError as e:
         print(f"ERROR: Missing environment variable: {e}")
         return {
@@ -56,8 +66,10 @@ def lambda_handler(event, context):
 
     user_sub = None
     try:
+        secret_hash = get_secret_hash(username, COGNITO_CLIENT_ID, os.environ['COGNITO_CLIENT_SECRET'])
         response = cognito.sign_up(
             ClientId=COGNITO_CLIENT_ID,
+            SecretHash=secret_hash,
             Username=username,
             Password=password,
             UserAttributes=[
@@ -85,7 +97,7 @@ def lambda_handler(event, context):
             # Here we are using 'error' as the key to match the test
             return {
                 'statusCode': 500,
-                'body': json.dumps({'error': 'User created in Cognito, but failed to create user profile.'})
+                'body': json.dumps({'message': 'User created in Cognito, but failed to create user profile.'})
             }
 
         return {

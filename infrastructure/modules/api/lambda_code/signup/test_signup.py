@@ -11,6 +11,7 @@ from signup import lambda_handler
 mock_os_environ = {
     'COGNITO_USER_POOL_ID': 'test_pool_id',
     'COGNITO_CLIENT_ID': 'test_client_id',
+    'COGNITO_CLIENT_SECRET': 'test_client_secret',
     'USER_PROFILE_TABLE_NAME': 'test_profile_table',
     'AWS_REGION': 'us-east-1' # Add region to prevent NoRegionError
 }
@@ -78,6 +79,7 @@ class TestSignupLambda(unittest.TestCase):
         # Assert cognito was called correctly
         self.cognito_client.sign_up.assert_called_once_with(
             ClientId='test_client_id',
+            SecretHash=unittest.mock.ANY,
             Username='testuser', # Updated to match signup.py
             Password='Password123!',
             UserAttributes=[
@@ -194,7 +196,7 @@ class TestSignupLambda(unittest.TestCase):
         self.assertEqual(response['statusCode'], 500)
         body = json.loads(response['body'])
         # This now matches the error key from the updated signup.py
-        self.assertEqual(body['error'], 'User created in Cognito, but failed to create user profile.')
+        self.assertEqual(body['message'], 'User created in Cognito, but failed to create user profile.')
 
 if __name__ == '__main__':
     unittest.main()
