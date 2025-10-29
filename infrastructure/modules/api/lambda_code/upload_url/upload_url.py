@@ -2,6 +2,7 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError
+import uuid
 
 s3_client = boto3.client('s3')
 
@@ -21,18 +22,37 @@ def lambda_handler(event, context):
             "headers": headers,
             "body": json.dumps({"message": "CORS preflight OK"})
         }
+    if not MEDIA_BUCKET_NAME:
+        return {
+            "statusCode": 500,
+            "headers": headers,
+            "body": json.dumps({"message": "MEDIA_BUCKET_NAME environment variable is not set."})
+        }
 
-    #  Main Logic (Stubbed)
-    # 1. Get the user's ID from the authorization token.
-    # 2. Generate a unique object key (e.g., using uuid.uuid4())
-    # 3. Call s3_client.generate_presigned_post(...)
-    # 4. Return the pre-signed URL and fields to the client.
+    object_key = f"uploads/{uuid.uuid4()}"
+    try:
+        # Generate a presigned S3 POST URL
+        response = s3_client.generate_presigned_post(
+            Bucket=MEDIA_BUCKET_NAME,
+            Key=object_key,
+            Fields={"Content-Type": "image/jpeg"},  # Example: Restrict to JPEGs
+            Conditions=[
+                {"Content-Type": "image/jpeg"},
+                ["content-length-range", 100, 5000000] # 100 bytes to 5 MB
+            ],
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+    except ClientError as e:
+        # Log the error and return a generic error message
+        print(f"Error generating presigned URL: {e}")
+        return {
+            "statusCode": 500,
+            "headers": headers,
+            "body": json.dumps({"message": "Could not generate an upload URL."})
+        }
 
     return {
         "statusCode": 200,
         "headers": headers,
-        "body": json.dumps({
-            "message": "This is the /get-upload-url endpoint. It's not fully implemented yet.",
-            "bucket_name_from_env": MEDIA_BUCKET_NAME
-        })
+        "body": json.dumps(response)
     }

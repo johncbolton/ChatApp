@@ -24,14 +24,25 @@ def test_cors_preflight():
     assert "Access-Control-Allow-Origin" in response["headers"]
 
 
-def test_successful_response():
+from botocore.exceptions import ClientError
+
+
+@patch("upload_url.s3_client")
+def test_successful_response(mock_s3_client):
+    mock_s3_client.generate_presigned_post.return_value = {
+        "url": "https://test-bucket.s3.amazonaws.com/",
+        "fields": {"key": "uploads/some-uuid"}
+    }
+
     event = {"httpMethod": "GET"}
     response = upload_url.lambda_handler(event, None)
     body = json.loads(response["body"])
 
     assert response["statusCode"] == 200
-    assert "This is the /get-upload-url endpoint" in body["message"]
-    assert body["bucket_name_from_env"] == "test-bucket"
+    assert "url" in body
+    assert "fields" in body
+    assert "key" in body["fields"]
+    mock_s3_client.generate_presigned_post.assert_called_once()
 
 
 def test_missing_env_var(monkeypatch):
@@ -43,18 +54,20 @@ def test_missing_env_var(monkeypatch):
     response = upload_url.lambda_handler(event, None)
     body = json.loads(response["body"])
 
-    assert response["statusCode"] == 200
-    assert "bucket_name_from_env" in body
-    assert body["bucket_name_from_env"] is None
 
+    assert response["statusCode"] == 500
+    assert "MEDIA_BUCKET_NAME" in body["message"]
 
 @patch("upload_url.s3_client")
-def test_s3_client_is_initialized(mock_s3_client):
-    assert hasattr(upload_url, "s3_client")
-    mock_s3_client.generate_presigned_post.return_value = {
-        "url": "https://example.com",
-        "fields": {"key": "value"}
-    }
+def test_s3_client_error(mock_s3_client):
+    mock_s3_client.generate_presigned_post.side_effect = ClientError(
+        {"Error": {"Code": "InternalError", "Message": "An internal error occurred"}},
+        "GeneratePresignedPost"
+    )
 
-    # You can expand this later when real S3 logic is added
-    assert callable(upload_url.lambda_handler)
+    event = {"httpMethod": "GET"}
+    response = upload_url.lambda_handler(event, None)
+    body = json.loads(response["body"])
+
+    assert response["statusCode"] == 500
+    assert "Could not generate an upload URL" in body["message"]
