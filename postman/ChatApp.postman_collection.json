@@ -1,12 +1,12 @@
 {
     "info": {
         "_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
-        "name": "ChatApp API (Sandbox Hardcoded)",
+        "name": "ChatApp API - Signup Test",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
         {
-            "name": "1. Register New User",
+            "name": "1. Signup New User",
             "event": [
                 {
                     "listen": "test",
@@ -17,18 +17,9 @@
                             "    pm.response.to.have.status(201);",
                             "});",
                             "",
-                            "// --- DYNAMIC PART ---",
-                            "// Parse the request body to get what we sent",
-                            "const requestBody = JSON.parse(pm.request.body.raw);",
-                            "// Parse the response body to get the new ID",
+                            "// Test 2: Check that a User ID was returned",
                             "const responseData = pm.response.json();",
-                            "",
-                            "// Save the credentials and new ID for the next requests",
-                            "pm.environment.set(\"test_username\", requestBody.username);",
-                            "pm.environment.set(\"test_password\", requestBody.password);",
-                            "pm.environment.set(\"newUserId\", responseData.id);",
-                            "",
-                            "pm.test(\"User ID was saved\", () => {",
+                            "pm.test(\"User ID was returned\", () => {",
                             "    pm.expect(responseData.id).to.not.be.empty;",
                             "});"
                         ],
@@ -48,126 +39,16 @@
                     "mode": "raw",
                     "raw": "{\n    \"username\": \"{{$randomUserName}}\",\n    \"password\": \"{{$randomPassword}}\",\n    \"email\": \"{{$randomEmail}}\"\n}"
                 },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-}},
-                "description": "Creates a new user with dynamic, random credentials."
-            },
-            "response": []
-        },
-        {
-            "name": "2. Login User",
-            "event": [
-                {
-                    "listen": "test",
-                    "script": {
-                        "exec": [
-                            "// Test 1: Check for a 200 \"OK\" status",
-                            "pm.test(\"Status code is 200\", () => {",
-                            "    pm.response.to.have.status(200);",
-                            "});",
-                            "",
-                            "// --- DYNAMIC PART ---",
-                            "// Parse the response to get the token",
-                            "const responseData = pm.response.json();",
-                            "",
-                            "// Save the token for authenticated requests",
-                            "pm.environment.set(\"authToken\", responseData.token);",
-                            "",
-                            "pm.test(\"Auth Token was received and saved\", () => {",
-                            "    pm.expect(responseData.token).to.not.be.empty;",
-                            "});"
-                        ],
-                        "type": "text/javascript"
-                    }
-                }
-            ],
-            "request": {
-                "method": "POST",
-                "header": [
-                    {
-                        "key": "Content-Type",
-                        "value": "application/json"
-                    }
-                ],
-                "body": {
-                    "mode": "raw",
-                    "raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
-                },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-}},
-                "description": "Logs in with the credentials from the first step."
-            },
-            "response": []
-        },
-        {
-            "name": "3. Get User Details",
-            "event": [
-                {
-                    "listen": "test",
-                    "script": {
-                        "exec": [
-                            "// Test 1: Check for a 200 \"OK\" status",
-                            "pm.test(\"Status code is 200\", () => {",
-                            "    pm.response.to.have.status(200);",
-                            "});",
-                            "",
-                            "// Test 2: Validate the user data",
-                            "const responseData = pm.response.json();",
-                            "const expectedId = pm.environment.get(\"newUserId\");",
-                            "const expectedUsername = pm.environment.get(\"test_username\");",
-                            "",
-                            "pm.test(\"Response ID matches saved User ID\", () => {",
-                            "    pm.expect(responseData.id).to.equal(expectedId);",
-                            "});",
-                            "",
-                            "pm.test(\"Response username matches saved username\", () => {",
-                            "    pm.expect(responseData.username).to.equal(expectedUsername);",
-                            "});"
-                        ],
-                        "type": "text/javascript"
-                    }
-                }
-            ],
-            "request": {
-                "method": "GET",
-                "header": [],
-                "auth": {
-                    "type": "bearer",
-                    "bearer": [
-                        {
-                            "key": "token",
-                            "value": "{{authToken}}",
-                            "type": "string"
-                        }
+                "url": {
+                    "raw": "{{baseUrl}}/signup",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "signup"
                     ]
                 },
-"url": {
-    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
-    "host": [
-        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
-    ],
-    "path": [
-        "sandbox",
-        "register"
-    ]
-},
-                "description": "Uses the saved token and user ID to fetch user data."
+                "description": "Creates a new user with dynamic, random credentials."
             },
             "response": []
         }

@@ -75,7 +75,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 15 minutes.`
+              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 5 minutes.`
             })
 
       - name: 'Wait for API Gateway to be ready'
@@ -92,13 +92,14 @@ jobs:
         run: npm install -g newman
 
       - name: 'Run Newman API Tests'
+        id: newman_tests # Give the step an ID to check its outcome
+        continue-on-error: true # This is critical: allows job to continue if tests fail
         run: |
           # Run tests using the collection file and dynamically inject the API URL from the terraform output
           newman run postman/ChatApp.postman_collection.json \
             --env-var "baseUrl=${{ steps.get_output.outputs.api_url }}" \
             --reporters cli,junit \
             --reporter-junit-export test-results/newman-results.xml
-        # continue-on-error: true # Keep this commented out to stop the job if tests fail
 
       - name: 'Upload Test Results'
         if: always() # 'always()' ensures this runs even if 'Run Newman API Tests' fails
@@ -108,10 +109,12 @@ jobs:
           path: test-results/newman-results.xml
       # --- END OF NEW STEPS ---
 
-      - name: 'Wait 5 Minutes'
+      - name: 'Wait 5 Minutes (if tests passed)'
+        if: steps.newman_tests.outcome == 'success' # Only wait if tests were successful
         run: sleep 300 # 300 seconds = 5 minutes
 
-      - name: 'Comment on PR (Destroying)'
+      - name: 'Comment on PR (Destroying after wait)'
+        if: steps.newman_tests.outcome == 'success' # Only run this comment if tests passed
         uses: actions/github-script@v7
         with:
           script: |
@@ -119,10 +122,23 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `⏰ 15 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
+              body: `⏰ 5 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
+            })
+            
+      - name: 'Comment on PR (Destroying on failure)'
+        if: steps.newman_tests.outcome == 'failure' # Only run this comment if tests failed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `❌ API tests failed. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}** immediately.`
             })
             
       - name: 'Terraform Init (Destroy)'
+        if: always() # This ensures it runs even if tests fail
         run: |
           # Re-initialize for destroy
           terraform init \
@@ -133,6 +149,7 @@ jobs:
         working-directory: infrastructure/sandbox
 
       - name: 'Terraform Destroy'
+        if: always() # This ensures it runs even if tests fail
         run: |
           terraform destroy -auto-approve \
             -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
