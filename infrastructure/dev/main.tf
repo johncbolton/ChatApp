@@ -45,11 +45,11 @@ module "api" {
   aws_region       = var.aws_region # Pass the region to the API module
 
   # --- Connections from Identity Module ---
-  cognito_user_pool_id     = module.identity.user_pool_id
-  cognito_client_id        = module.identity.user_pool_client_id
-  cognito_user_pool_arn    = module.identity.user_pool_arn
+  cognito_user_pool_id    = module.identity.user_pool_id
+  cognito_client_id       = module.identity.user_pool_client_id
+  cognito_user_pool_arn   = module.identity.user_pool_arn
   user_profile_table_name = module.identity.user_profile_table_name # <-- This was missing
-  user_profile_table_arn = module.identity.user_profile_table_arn
+  user_profile_table_arn  = module.identity.user_profile_table_arn
 
   # --- Connections from Media Storage Module ---
   media_bucket_name         = module.media_storage.media_bucket_name
