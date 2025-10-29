@@ -280,7 +280,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   depends_on = [
     aws_api_gateway_integration.login,
     aws_api_gateway_integration.signup,
-    aws_api_gateway_integration.get_upload_url
+    aws_api_gateway_integration.get_upload_url,
 
     aws_api_gateway_method.login,
     aws_api_gateway_method.signup,
