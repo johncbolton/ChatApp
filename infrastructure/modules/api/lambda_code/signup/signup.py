@@ -4,9 +4,11 @@ import json
 import re
 
 def lambda_handler(event, context):
+    
+    region = os.environ.get('AWS_REGION')
 
-    dynamodb = boto3.resource('dynamodb')
-    cognito = boto3.client('cognito-idp')
+    dynamodb = boto3.resource('dynamodb', region_name=region)
+    cognito = boto3.client('cognito-idp', region_name=region)
     
     try:
         USER_PROFILE_TABLE = os.environ['USER_PROFILE_TABLE_NAME']
@@ -94,4 +96,5 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps({'message': f'An internal server error occurred: {str(e)}'})
         }
+
 
