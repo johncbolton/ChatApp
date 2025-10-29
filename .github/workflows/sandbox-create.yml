@@ -1,0 +1,158 @@
+name: 'Sandbox: Create or Update (5 min auto-destroy)'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy-and-destroy-sandbox:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_DEV }}
+      TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE_SANDBOX }} 
+
+    steps:
+      - name: 'Sanitize Branch Name'
+        id: sanitize
+        run: |
+          BRANCH_NAME=$(echo ${{ github.head_ref }} | tr / - | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g' | cut -c 1-30)
+          echo "sandbox_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "sandbox_key=sandboxes/$BRANCH_NAME/terraform.tfstate" >> $GITHUB_OUTPUT
+
+      - name: 'Checkout Code (with Submodules)'
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_IAM_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 'Setup Terraform'
+        id: setup_tf
+        uses: hashicorp/setup-terraform@v3
+
+      - name: 'Terraform Init (Deploy)'
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
+            -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure/sandbox
+
+      - name: 'Terraform Apply (Deploy)'
+        id: apply
+        run: |
+          terraform apply -auto-approve \
+            -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=${{ env.PROJECT_NAME }}"
+        working-directory: infrastructure/sandbox
+
+      - name: 'Get API URL Output'
+        id: get_output
+        run: |
+          echo "api_url=$(terraform output -raw api_invoke_url)" >> $GITHUB_OUTPUT
+        working-directory: infrastructure/sandbox
+
+      - name: 'Comment on PR with API URL'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Sandbox **${{ steps.sanitize.outputs.sandbox_name }}** deployed.\n\nAPI URL: ${{ steps.get_output.outputs.api_url }}\n\nThis sandbox will be automatically destroyed in 5 minutes.`
+            })
+
+      - name: 'Wait for API Gateway to be ready'
+        run: sleep 15 # Wait 15 seconds for API to stabilize before testing
+        shell: bash
+
+      # --- NEW STEPS FOR NEWMAN API TESTING ---
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Use a stable LTS version
+
+      - name: 'Install Newman'
+        run: npm install -g newman
+
+      - name: 'Run Newman API Tests'
+        id: newman_tests # Give the step an ID to check its outcome
+        continue-on-error: true # This is critical: allows job to continue if tests fail
+        run: |
+          # Run tests using the collection file and dynamically inject the API URL from the terraform output
+          newman run postman/ChatApp.postman_collection.json \
+            --env-var "baseUrl=${{ steps.get_output.outputs.api_url }}" \
+            --reporters cli,junit \
+            --reporter-junit-export test-results/newman-results.xml
+
+      - name: 'Upload Test Results'
+        if: always() # 'always()' ensures this runs even if 'Run Newman API Tests' fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: test-results/newman-results.xml
+      # --- END OF NEW STEPS ---
+
+      - name: 'Wait 5 Minutes (if tests passed)'
+        if: steps.newman_tests.outcome == 'success' # Only wait if tests were successful
+        run: sleep 300 # 300 seconds = 5 minutes
+
+      - name: 'Comment on PR (Destroying after wait)'
+        if: steps.newman_tests.outcome == 'success' # Only run this comment if tests passed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `⏰ 5 minute timer is up. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}**.`
+            })
+            
+      - name: 'Comment on PR (Destroying on failure)'
+        if: steps.newman_tests.outcome == 'failure' # Only run this comment if tests failed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `❌ API tests failed. Destroying sandbox **${{ steps.sanitize.outputs.sandbox_name }}** immediately.`
+            })
+            
+      - name: 'Terraform Init (Destroy)'
+        if: always() # This ensures it runs even if tests fail
+        run: |
+          # Re-initialize for destroy
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
+            -backend-config="key=${{ steps.sanitize.outputs.sandbox_key }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure/sandbox
+
+      - name: 'Terraform Destroy'
+        if: always() # This ensures it runs even if tests fail
+        run: |
+          terraform destroy -auto-approve \
+            -var="environment_name=${{ steps.sanitize.outputs.sandbox_name }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=${{ env.PROJECT_NAME }}"
+        working-directory: infrastructure/sandbox

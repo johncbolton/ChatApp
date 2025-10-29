@@ -1,0 +1,56 @@
+{
+    "info": {
+        "_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
+        "name": "ChatApp API - Signup Test",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Signup New User",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "// Test 1: Check for a 201 \"Created\" status",
+                            "pm.test(\"Status code is 201\", () => {",
+                            "    pm.response.to.have.status(201);",
+                            "});",
+                            "",
+                            "// Test 2: Check that a User ID was returned",
+                            "const responseData = pm.response.json();",
+                            "pm.test(\"User ID was returned\", () => {",
+                            "    pm.expect(responseData.id).to.not.be.empty;",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"username\": \"{{$randomUserName}}\",\n    \"password\": \"{{$randomPassword}}\",\n    \"email\": \"{{$randomEmail}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/signup",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "signup"
+                    ]
+                },
+                "description": "Creates a new user with dynamic, random credentials."
+            },
+            "response": []
+        }
+    ]
+}
