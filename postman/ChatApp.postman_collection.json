@@ -1,7 +1,7 @@
 {
     "info": {
         "_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
-        "name": "ChatApp API",
+        "name": "ChatApp API (Sandbox Hardcoded)",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -49,11 +49,12 @@
                     "raw": "{\n    \"username\": \"{{$randomUserName}}\",\n    \"password\": \"{{$randomPassword}}\",\n    \"email\": \"{{$randomEmail}}\"\n}"
                 },
                 "url": {
-                    "raw": "{{baseUrl}}/register",
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/register",
                     "host": [
-                        "{{baseUrl}}"
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
                     ],
                     "path": [
+                        "sandbox",
                         "register"
                     ]
                 },
@@ -101,11 +102,12 @@
                     "raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
                 },
                 "url": {
-                    "raw": "{{baseUrl}}/login",
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/login",
                     "host": [
-                        "{{baseUrl}}"
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
                     ],
                     "path": [
+                        "sandbox",
                         "login"
                     ]
                 },
@@ -156,11 +158,12 @@
                     ]
                 },
                 "url": {
-                    "raw": "{{baseUrl}}/users/{{newUserId}}",
+                    "raw": "https://{your-api-id}.execute-api.{your-region}.amazonaws.com/sandbox/users/{{newUserId}}",
                     "host": [
-                        "{{baseUrl}}"
+                        "https://{your-api-id}.execute-api.{your-region}.amazonaws.com"
                     ],
                     "path": [
+                        "sandbox",
                         "users",
                         "{{newUserId}}"
                     ]
