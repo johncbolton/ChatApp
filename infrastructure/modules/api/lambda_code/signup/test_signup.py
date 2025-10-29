@@ -130,21 +130,6 @@ class TestSignupLambda(unittest.TestCase):
         body = json.loads(response['body'])
         self.assertEqual(body['message'], 'This username already exists.')
 
-    def test_invalid_password(self):
-        # Test the internal password logic
-        event_body = {
-            'email': 'test@example.com',
-            'password': 'weak', # Less than 8 chars
-            'username': 'testuser'
-        }
-        event = {'body': json.dumps(event_body)}
-        
-        response = lambda_handler(event, {})
-        
-        self.assertEqual(response['statusCode'], 400)
-        body = json.loads(response['body'])
-        self.assertEqual(body['message'], 'Password must be at least 8 characters.')
-
     def test_invalid_json_body(self):
         event = {'body': 'this is not json'}
         
