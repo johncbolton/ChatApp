@@ -24,7 +24,11 @@ def lambda_handler(event, context):
     try:
         USER_PROFILE_TABLE = os.environ['USER_PROFILE_TABLE_NAME']
         COGNITO_CLIENT_ID = os.environ['COGNITO_CLIENT_ID']
-        # We don't need COGNITO_USER_POOL_ID for sign_up
+        
+        # --- CHANGE 1: Added User Pool ID ---
+        # This is required for the admin_confirm_sign_up call
+        COGNITO_USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
+        
     except KeyError as e:
         print(f"ERROR: Missing environment variable: {e}")
         return {
@@ -42,7 +46,6 @@ def lambda_handler(event, context):
             'body': json.dumps({'message': 'Invalid JSON format in request body.'})
         }
 
-    # --- FIX 1: Remove 'username' ---
     # We only need email and password
     email = body.get('email')
     password = body.get('password')
@@ -61,7 +64,6 @@ def lambda_handler(event, context):
             'body': json.dumps({'message': 'Invalid email format.'})
         }
     
-    # --- FIX 2: Match password policy from Terraform ---
     if len(password) < 6:
         return {
             'statusCode': 400,
@@ -71,10 +73,10 @@ def lambda_handler(event, context):
 
     user_sub = None
     try:
-        # --- FIX 3: Pass 'email' as the 'Username' parameter ---
+        # Use email as the username
         response = cognito.sign_up(
             ClientId=COGNITO_CLIENT_ID,
-            Username=email,  # Use email as the username
+            Username=email,  
             Password=password,
             UserAttributes=[
                 {'Name': 'email', 'Value': email}
@@ -82,12 +84,22 @@ def lambda_handler(event, context):
         )
         
         user_sub = response['UserSub']
+        
+        # --- CHANGE 2: Auto-confirm the user ---
+        # This is the fix for your Postman tests.
+        # It moves the user from UNCONFIRMED to CONFIRMED.
+        print(f"User {email} created. Attempting to auto-confirm...")
+        cognito.admin_confirm_sign_up(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Username=email
+        )
+        print(f"User {email} auto-confirmed.")
+        # --- End of Change ---
 
         try:
             table = dynamodb.Table(USER_PROFILE_TABLE)
             table.put_item(
                 Item={
-                    # --- FIX 4: Match 'userId' hash_key from Terraform ---
                     'userId': user_sub, 
                     'email': email,
                     'createdAt': datetime.datetime.utcnow().isoformat()
@@ -103,7 +115,6 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': 'User created in Cognito, but failed to create user profile.'})
             }
 
-        # --- FIX 5: Return 'id' to match Postman test ---
         return {
             'statusCode': 201,
             'headers': cors_headers,
@@ -120,14 +131,13 @@ def lambda_handler(event, context):
                 'body': json.dumps({'message': 'This email already exists.'})
             }
         elif e.response['Error']['Code'] == 'InvalidParameterException':
-            # This is the 400 error you were getting before
             return {
                 'statusCode': 400,
                 'headers': cors_headers,
                 'body': json.dumps({'message': f'Invalid parameter: {str(e)}'})
             }
         
-        # Catch other Cognito errors
+        # Catch other Cognito errors (e.g., from admin_confirm_sign_up)
         return {
             'statusCode': 500,
             'headers': cors_headers,
