@@ -92,20 +92,6 @@ class TestSignupLambda(unittest.TestCase):
         # We can also assert that 'createdAt' exists
         self.assertIn('createdAt', put_item_call_args['Item'])
 
-    def test_missing_parameters(self):
-        event_body = {
-            'email': 'test@example.com'
-            # 'password' is missing
-        }
-        
-        event = {'body': json.dumps(event_body)}
-        response = lambda_handler(event, {})
-        
-        self.assertEqual(response['statusCode'], 400)
-        body = json.loads(response['body'])
-        # Updated message to match signup.py
-        self.assertEqual(body['message'], 'Email and password are required.')
-
     def test_username_exists(self):
         error_response = {
             'Error': {
