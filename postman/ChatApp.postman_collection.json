@@ -1,56 +1,395 @@
 {
-    "info": {
-        "_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
-        "name": "ChatApp API - Signup Test",
-        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-    },
-    "item": [
-        {
-            "name": "1. Signup New User",
-            "event": [
-                {
-                    "listen": "test",
-                    "script": {
-                        "exec": [
-                            "// Test 1: Check for a 201 \"Created\" status",
-                            "pm.test(\"Status code is 201\", () => {",
-                            "    pm.response.to.have.status(201);",
-                            "});",
-                            "",
-                            "// Test 2: Check that a User ID was returned",
-                            "const responseData = pm.response.json();",
-                            "pm.test(\"User ID was returned\", () => {",
-                            "    pm.expect(responseData.id).to.not.be.empty;",
-                            "});"
-                        ],
-                        "type": "text/javascript"
-                    }
-                }
-            ],
-            "request": {
-                "method": "POST",
-                "header": [
-                    {
-                        "key": "Content-Type",
-                        "value": "application/json"
-                    }
-                ],
-                "body": {
-                    "mode": "raw",
-                    "raw": "{\n    \"email\": \"{{$randomEmail}}\",\n    \"password\": \"{{$randomPassword}}\"\n}"
-                },
-                "url": {
-                    "raw": "{{baseUrl}}/signup",
-                    "host": [
-                        "{{baseUrl}}"
-                    ],
-                    "path": [
-                        "signup"
-                    ]
-                },
-                "description": "Creates a new user with dynamic, random credentials."
-            },
-            "response": []
-        }
-    ]
+	"info": {
+		"_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
+		"name": "ChatApp API - Signup (Expanded)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Signup",
+			"item": [
+				{
+					"name": "1. Successful Signup (201)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate a random email and save it to a collection variable",
+									"// This allows us to re-use it in the 'duplicate' test",
+									"var randomEmail = \"testuser_\" + Date.now() + \"@example.com\";",
+									"pm.collectionVariables.set(\"user_email\", randomEmail);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test 1: Check for a 201 \"Created\" status",
+									"pm.test(\"Status code is 201 Created\", () => {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"// Test 2: Check that the response is valid JSON",
+									"pm.test(\"Response is valid JSON\", () => {",
+									"    pm.response.to.be.json;",
+									"});",
+									"",
+									"// Test 3: Check that a User ID ('id') was returned and is not empty",
+									"const responseData = pm.response.json();",
+									"pm.test(\"User ID ('id') was returned\", () => {",
+									"    pm.expect(responseData.id).to.not.be.empty;",
+									"    pm.expect(responseData.id).to.be.a('string');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{user_email}}\",\n    \"password\": \"ValidPassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Creates a new user with a dynamic email. Saves the email for the duplicate test."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Signup with Duplicate Email (409)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 409 Conflict\", () => {",
+									"    pm.response.to.have.status(409);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for duplicate email\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"This email already exists.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{user_email}}\",\n    \"password\": \"AnotherPassword456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Attempts to sign up using the *same email* from the previous successful test."
+					},
+					"response": []
+				},
+				{
+					"name": "3. Signup Missing Email (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for missing field\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"Email and password are required.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"ValidPassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Tests the check: if not all([email, password])"
+					},
+					"response": []
+				},
+				{
+					"name": "4. Signup Missing Password (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for missing field\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"Email and password are required.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"newuser_{{$timestamp}}@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Tests the check: if not all([email, password])"
+					},
+					"response": []
+				},
+				{
+					"name": "5. Signup Invalid Email Format (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for invalid email\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"Invalid email format.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"not-a-valid-email\",\n    \"password\": \"ValidPassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Tests the regex check: if not re.match(...)"
+					},
+					"response": []
+				},
+				{
+					"name": "6. Signup Password Too Short (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for short password\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"Password must be at least 6 characters.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"shortpass_{{$timestamp}}@example.com\",\n    \"password\": \"12345\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Tests the password policy check: if len(password) < 6"
+					},
+					"response": []
+				},
+				{
+					"name": "7. Signup Invalid JSON Body (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for invalid JSON\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.message).to.eql(\"Invalid JSON format in request body.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"invalidjson@example.com\",\n    \"password\": \"ValidPassword123\"\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"signup"
+							]
+						},
+						"description": "Tests the initial 'try/except json.JSONDecodeError' block by sending a broken JSON string."
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "YOUR_API_GATEWAY_URL"
+		},
+		{
+			"key": "user_email",
+			"value": "",
+			"description": "This variable is set by the '1. Successful Signup' pre-request script and used by the '2. Duplicate Signup' test."
+		}
+	]
 }
