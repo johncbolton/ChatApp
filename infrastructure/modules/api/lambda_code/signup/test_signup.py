@@ -8,7 +8,7 @@ import os # Import os to use for @patch.dict
 from signup import lambda_handler
 
 mock_os_environ = {
-    'COGNITO_USER_POOL_ID': 'test_pool_id',
+    # 'COGNITO_USER_POOL_ID': 'test_pool_id', # Not needed for sign_up
     'COGNITO_CLIENT_ID': 'test_client_id',
     'USER_PROFILE_TABLE_NAME': 'test_profile_table',
     'AWS_REGION': 'us-east-1' # Add region to prevent NoRegionError
@@ -57,7 +57,6 @@ class TestSignupLambda(unittest.TestCase):
         event_body = {
             'email': 'test@example.com',
             'password': 'Password123!',
-            'username': 'testuser'
         }
         
         event = {'body': json.dumps(event_body)}
@@ -70,14 +69,12 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 201)
         body = json.loads(response['body'])
-        # Updated message to match the one in the new signup.py
-        self.assertEqual(body['message'], 'User created successfully. Please check your email to confirm.')
-        self.assertEqual(body['userSub'], 'new-user-uuid-12345') # Updated key
+        self.assertEqual(body['id'], 'new-user-uuid-12345')
 
         # Assert cognito was called correctly
         self.cognito_client.sign_up.assert_called_once_with(
             ClientId='test_client_id',
-            Username='testuser', # Updated to match signup.py
+            Username='test@example.com', # Use email as username
             Password='Password123!',
             UserAttributes=[
                 {'Name': 'email', 'Value': 'test@example.com'}
@@ -90,14 +87,15 @@ class TestSignupLambda(unittest.TestCase):
         # Assert put_item was called on the table object
         self.mock_table.put_item.assert_called_once()
         put_item_call_args = self.mock_table.put_item.call_args[1]
-        self.assertEqual(put_item_call_args['Item']['userID'], 'new-user-uuid-12345')
-        self.assertEqual(put_item_call_args['Item']['username'], 'testuser')
+        self.assertEqual(put_item_call_args['Item']['userId'], 'new-user-uuid-12345')
+        self.assertEqual(put_item_call_args['Item']['email'], 'test@example.com')
+        # We can also assert that 'createdAt' exists
+        self.assertIn('createdAt', put_item_call_args['Item'])
 
     def test_missing_parameters(self):
         event_body = {
-            'email': 'test@example.com',
-            'password': 'Password123!'
-            # 'username' is missing
+            'email': 'test@example.com'
+            # 'password' is missing
         }
         
         event = {'body': json.dumps(event_body)}
@@ -106,7 +104,7 @@ class TestSignupLambda(unittest.TestCase):
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
         # Updated message to match signup.py
-        self.assertEqual(body['message'], 'Username, email, and password are required.')
+        self.assertEqual(body['message'], 'Email and password are required.')
 
     def test_username_exists(self):
         error_response = {
@@ -120,7 +118,6 @@ class TestSignupLambda(unittest.TestCase):
         event_body = {
             'email': 'existing@example.com',
             'password': 'Password123!',
-            'username': 'testuser'
         }
         event = {'body': json.dumps(event_body)}
         
@@ -128,7 +125,7 @@ class TestSignupLambda(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 409)
         body = json.loads(response['body'])
-        self.assertEqual(body['message'], 'This username already exists.')
+        self.assertEqual(body['message'], 'This email already exists.')
 
     def test_invalid_json_body(self):
         event = {'body': 'this is not json'}
@@ -156,7 +153,6 @@ class TestSignupLambda(unittest.TestCase):
         event_body = {
             'email': 'test@example.com',
             'password': 'Password123!',
-            'username': 'testuser'
         }
         event = {'body': json.dumps(event_body)}
 
