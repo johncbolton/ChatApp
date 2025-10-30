@@ -1,24 +1,26 @@
 {
 	"info": {
 		"_postman_id": "a8f5-4f3b-8f1e-f3b1e7c4b0c2",
-		"name": "ChatApp API - Signup (Expanded)",
+		"name": "ChatApp API - Auth",
+		"description": "Handles all user authentication: Signup and Login.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "Signup",
+			"name": "1. Signup",
 			"item": [
 				{
-					"name": "1. Successful Signup (201)",
+					"name": "1.1 Successful Signup (201)",
 					"event": [
 						{
 							"listen": "prerequest",
 							"script": {
 								"exec": [
 									"// Generate a random email and save it to a collection variable",
-									"// This allows us to re-use it in the 'duplicate' test",
 									"var randomEmail = \"testuser_\" + Date.now() + \"@example.com\";",
-									"pm.collectionVariables.set(\"user_email\", randomEmail);"
+									"pm.collectionVariables.set(\"user_email\", randomEmail);",
+									"// Save the password for the login test",
+									"pm.collectionVariables.set(\"user_password\", \"ValidPassword123!\");"
 								],
 								"type": "text/javascript"
 							}
@@ -27,17 +29,14 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// Test 1: Check for a 201 \"Created\" status",
 									"pm.test(\"Status code is 201 Created\", () => {",
 									"    pm.response.to.have.status(201);",
 									"});",
 									"",
-									"// Test 2: Check that the response is valid JSON",
 									"pm.test(\"Response is valid JSON\", () => {",
 									"    pm.response.to.be.json;",
 									"});",
 									"",
-									"// Test 3: Check that a User ID ('id') was returned and is not empty",
 									"const responseData = pm.response.json();",
 									"pm.test(\"User ID ('id') was returned\", () => {",
 									"    pm.expect(responseData.id).to.not.be.empty;",
@@ -58,7 +57,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"{{user_email}}\",\n    \"password\": \"ValidPassword123\"\n}",
+							"raw": "{\n    \"email\": \"{{user_email}}\",\n    \"password\": \"{{user_password}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -74,12 +73,12 @@
 								"signup"
 							]
 						},
-						"description": "Creates a new user with a dynamic email. Saves the email for the duplicate test."
+						"description": "Creates a new user with a dynamic email. Saves the email and password for other tests."
 					},
 					"response": []
 				},
 				{
-					"name": "2. Signup with Duplicate Email (409)",
+					"name": "1.2 Signup with Duplicate Email (409)",
 					"event": [
 						{
 							"listen": "test",
@@ -129,7 +128,7 @@
 					"response": []
 				},
 				{
-					"name": "3. Signup Missing Email (400)",
+					"name": "1.3 Signup Missing Email (400)",
 					"event": [
 						{
 							"listen": "test",
@@ -158,7 +157,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"password\": \"ValidPassword123\"\n}",
+							"raw": "{\n    \"password\": \"{{user_password}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -179,7 +178,7 @@
 					"response": []
 				},
 				{
-					"name": "4. Signup Missing Password (400)",
+					"name": "1.4 Signup Missing Password (400)",
 					"event": [
 						{
 							"listen": "test",
@@ -229,7 +228,7 @@
 					"response": []
 				},
 				{
-					"name": "5. Signup Invalid Email Format (400)",
+					"name": "1.5 Signup Invalid Email Format (400)",
 					"event": [
 						{
 							"listen": "test",
@@ -258,7 +257,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"not-a-valid-email\",\n    \"password\": \"ValidPassword123\"\n}",
+							"raw": "{\n    \"email\": \"not-a-valid-email\",\n    \"password\": \"{{user_password}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -279,7 +278,7 @@
 					"response": []
 				},
 				{
-					"name": "6. Signup Password Too Short (400)",
+					"name": "1.6 Signup Password Too Short (400)",
 					"event": [
 						{
 							"listen": "test",
@@ -329,7 +328,7 @@
 					"response": []
 				},
 				{
-					"name": "7. Signup Invalid JSON Body (400)",
+					"name": "1.7 Signup Invalid JSON Body (400)",
 					"event": [
 						{
 							"listen": "test",
@@ -378,7 +377,330 @@
 					},
 					"response": []
 				}
-			]
+			],
+			"description": "Tests for the user signup process."
+		},
+		{
+			"name": "2. Login",
+			"item": [
+				{
+					"name": "2.1 Successful Login (200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", () => {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", () => {",
+									"    pm.response.to.be.json;",
+									"});",
+									"",
+									"const responseData = pm.response.json();",
+									"",
+									"pm.test(\"Returns an ID Token\", () => {",
+									"    pm.expect(responseData.id_token).to.not.be.empty;",
+									"    pm.expect(responseData.id_token).to.be.a('string');",
+									"});",
+									"",
+									"pm.test(\"Returns an Access Token\", () => {",
+									"    pm.expect(responseData.access_token).to.not.be.empty;",
+									"    pm.expect(responseData.access_token).to.be.a('string');",
+									"});",
+									"",
+									"// Save tokens to environment variables for use in other requests",
+									"pm.collectionVariables.set(\"id_token\", responseData.id_token);",
+									"pm.collectionVariables.set(\"access_token\", responseData.access_token);",
+									"console.log(\"Saved tokens to collection variables.\")"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{user_email}}\",\n    \"password\": \"{{user_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Logs in with the user created in the '1.1 Successful Signup' test. Saves the auth tokens."
+					},
+					"response": []
+				},
+				{
+					"name": "2.2 Login with Invalid Password (401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401 Unauthorized\", () => {",
+									"    pm.response.to.have.status(401);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.error).to.eql(\"Invalid username or password\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{user_email}}\",\n    \"password\": \"WrongPassword123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Tests the 'NotAuthorizedException' block by sending the correct username but wrong password."
+					},
+					"response": []
+				},
+				{
+					"name": "2.3 Login with Non-Existent User (404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404 Not Found\", () => {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.error).to.eql(\"User not found\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"nonexistent_user_{{$timestamp}}@example.com\",\n    \"password\": \"anypass\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Tests the 'UserNotFoundException' block by sending a user that does not exist."
+					},
+					"response": []
+				},
+				{
+					"name": "2.4 Login Missing Username (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for missing field\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.error).to.include(\"Username and password are required.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"{{user_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Tests the 'if not username or not password' check."
+					},
+					"response": []
+				},
+				{
+					"name": "2.5 Login Missing Password (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for missing field\", () => {
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.error).to.include(\"Username and password are required.\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{user_email}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Tests the 'if not username or not password' check."
+					},
+					"response": []
+				},
+				{
+					"name": "2.6 Login Invalid JSON Body (400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message is correct for invalid JSON\", () => {",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData.error).to.include(\"Invalid input: Expecting property name\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"invalidjson@example.com\",\n    \"password\": \"ValidPassword123\"\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Tests the 'try/except json.JSONDecodeError' block."
+					},
+					"response": []
+				}
+			],
+			"description": "Tests for the user login process."
 		}
 	],
 	"variable": [
@@ -389,7 +711,22 @@
 		{
 			"key": "user_email",
 			"value": "",
-			"description": "This variable is set by the '1. Successful Signup' pre-request script and used by the '2. Duplicate Signup' test."
+			"description": "Set by '1.1 Successful Signup' and used by signup/login tests."
+		},
+		{
+			"key": "user_password",
+			"value": "",
+			"description": "Set by '1.1 Successful Signup' and used by the '2.1 Successful Login' test."
+		},
+		{
+			"key": "id_token",
+			"value": "",
+			"description": "Set by '2.1 Successful Login' and used for subsequent authenticated requests."
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"description": "Set by '2.1 Successful Login' and used for subsequent authenticated requests."
 		}
 	]
 }
